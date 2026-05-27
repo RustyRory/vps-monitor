@@ -99,6 +99,8 @@ export async function deleteApp(name) {
 export async function updateApp(name) {
   safeName(name);
   const appPath = join(APPS_ROOT, name);
-  await execFile('git', ['-C', appPath, 'pull']);
+  const safeDir = [`-c`, `safe.directory=${appPath}`];
+  await execFile('git', ['-C', appPath, ...safeDir, 'fetch', 'origin']);
+  await execFile('git', ['-C', appPath, ...safeDir, 'reset', '--hard', 'FETCH_HEAD']);
   return getAllServiceNames(name);
 }

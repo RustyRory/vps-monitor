@@ -951,11 +951,82 @@ Secrets GitHub requis : `VPS_MONITOR_URL`, `VPS_MONITOR_USER`, `VPS_MONITOR_PASS
 
 ---
 
-## Phase 6 — Évolutions futures
+## Phase 6 — Infrastructure partagée & améliorations déploiement
+
+### Mongo partagé via compose infra
+
+Les apps multi-services qui utilisaient leur propre service `mongo` dans leur compose posent un problème : à la suppression de l'app, mongo est stoppé. Et plusieurs apps ne peuvent pas partager la même base si chacune embarque la sienne.
+
+**Solution** : un compose `infra` géré par vps-monitor, toujours inclus en tête du main compose.
+
+Au démarrage de vps-monitor, `ensureInfraInclude()` :
+1. Crée `/var/www/infra/docker-compose.yml` si absent (avec le service `mongo:7`)
+2. Injecte `infra/docker-compose.yml` en première entrée du main compose
+3. Lance `composeUp('mongo')`
+
+Le service `infra` est filtré de la liste des apps supprimables dans le dashboard.
+
+Les apps qui ont besoin de mongo suppriment leur service `mongo` du compose et utilisent simplement :
+```yaml
+environment:
+  MONGO_URI: mongodb://mongo:27017/madb
+```
+Les containers partagent le réseau Docker via les `include:` du main compose — ils se joignent par hostname.
+
+### deleteApp — arrêt de tous les services
+
+Avant : `deleteApp` ne stoppait que le premier service de l'app (celui retourné par `getFirstServiceName`). Les services secondaires (API, etc.) restaient en vie en tant qu'orphelins.
+
+**Fix** : ajout de `getAllServiceNames(name)` dans `compose.js` — parse le bloc `services:` du compose de l'app et retourne tous les noms. `deleteApp` appelle `composeDown` sur chacun en parallèle avant de supprimer les fichiers.
+
+### Suppression de containers depuis le dashboard
+
+Nouveau bouton **Supprimer** sur les cards container dans l'onglet Monitoring. Visible uniquement quand le container est arrêté (Stop → Supprimer). Utilise `container.remove({ force: false })` via dockerode.
+
+API : `POST /api/container/remove` avec `{ name }`.
+
+### Nginx — option `stripPrefix`
+
+**Problème** : le template `addApp()` générait toujours `proxy_pass http://127.0.0.1:${port}/;` avec un trailing slash qui supprime le préfixe de l'URL avant de transmettre au container. Correct pour les apps statiques (Vue SPA, nginx interne), mais cassant pour les apps **Next.js avec `basePath`** — Next.js reçoit `/` au lieu de `/Lucky7/` et retourne 404.
+
+**Fix** : `addApp(path, port, stripPrefix = true)` — si `stripPrefix = false`, génère `proxy_pass http://127.0.0.1:${port}` sans trailing slash, le préfixe est conservé.
+
+**Dashboard** : case à cocher **"Conserver le préfixe"** dans le formulaire nginx et dans le formulaire de clone. Coché = `stripPrefix: false`.
+
+Règle : cocher pour les apps **Next.js avec `basePath`**. Ne pas cocher pour les apps Vue/statiques avec un nginx interne qui attend le path strippé.
+
+### Lucky7 — configuration déploiement
+
+App Next.js (frontend) + Express+Socket.io (backend) + mongo partagé.
+
+**Architecture** :
+- `lucky7-front` : port `8081`, nginx block `/Lucky7/` avec **"Conserver le préfixe" coché** (Next.js basePath = `/Lucky7`)
+- `lucky7-back` : port `4001`, nginx block `/Lucky7-api/` avec strip (Socket.io avec path par défaut `/socket.io/`)
+
+**Fichiers créés/modifiés** :
+- `deployment/docker-compose.yml` : two services, mongo partagé
+- `lucky7-app/frontend/Dockerfile` : `NEXT_PUBLIC_BACKEND_URL` comme build ARG
+- `lucky7-app/frontend/src/lib/socket.ts` : parse `NEXT_PUBLIC_BACKEND_URL` pour extraire origin + construire le socket.io path (`url.pathname + '/socket.io'`)
+- `.github/workflows/deploy-staging.yml` : SSH → vps-monitor API
+
+**Pourquoi parser l'URL dans socket.ts** : `io('http://host/path')` interprète `/path` comme un namespace Socket.io, pas comme un path de connexion. Il faut `io(origin, { path: '/path/socket.io' })` pour que le WebSocket passe par le bon bloc nginx.
+
+### Fix B3dev-TP_VUE
+
+Deux bugs corrigés :
+
+1. **Double `/api`** : `VITE_BACKEND_URL` valait `http://78.138.58.95/B3dev-TP_VUE/api` alors que le code Vue ajoutait `/api/...` → `http://.../api/api/auth/...` → 404. Corrigé : `VITE_BACKEND_URL: http://78.138.58.95/B3dev-TP_VUE`.
+
+2. **WebSocket bloqué** : le template nginx de `addApp()` ne transmettait pas les headers `Upgrade` et `Connection`. Corrigé : ajout systématique de ces deux headers dans le bloc généré.
+
+---
+
+## Phase 7 — Évolutions futures
 
 - Alertes email / Discord quand un service tombe
 - Historique d'uptime (stockage fichier ou SQLite)
 - Graphiques CPU / RAM via `dockerode.stats`
 - Support multi-serveurs
+- `git config --global --add safe.directory '*'` dans le Dockerfile vps-monitor (les repos clonés par le container root ne sont pas accessibles en `git` par l'utilisateur host)
 
 ---
