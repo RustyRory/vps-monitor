@@ -231,12 +231,12 @@ app.get('/api/deploy/status/:app', requireAuth, async (req, res) => {
 });
 
 app.post('/api/deploy/clone', requireAuth, async (req, res) => {
-  const { name, url, nginxPath, port, stripPrefix = true } = req.body;
+  const { name, url, nginxPath, port, stripPrefix = true, branch } = req.body;
   if (!name || !url) return res.status(400).json({ error: 'name et url requis' });
   if (nginxPath && !port) return res.status(400).json({ error: 'port requis si nginxPath fourni' });
   try {
     const parsedPort = port ? parseInt(port, 10) : null;
-    const service = await cloneApp(name, url, nginxPath || null, parsedPort);
+    const service = await cloneApp(name, url, nginxPath || null, parsedPort, branch || null);
     if (nginxPath && parsedPort) {
       await addApp(nginxPath, parsedPort, stripPrefix);
       await reloadNginx();

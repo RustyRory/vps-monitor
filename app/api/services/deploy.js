@@ -57,12 +57,13 @@ export async function listApps() {
   }));
 }
 
-export async function cloneApp(name, url, nginxPath, nginxPort) {
+export async function cloneApp(name, url, nginxPath, nginxPort, branch) {
   safeName(name);
   if (!/^https?:\/\//.test(url)) throw new Error('URL invalide');
 
   const appPath = join(APPS_ROOT, name);
-  await execFile('git', ['clone', url, appPath]);
+  const cloneArgs = branch ? ['clone', '-b', branch, url, appPath] : ['clone', url, appPath];
+  await execFile('git', cloneArgs);
 
   const service = await getFirstServiceName(name);
 
