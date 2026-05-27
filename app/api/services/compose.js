@@ -87,8 +87,9 @@ export async function composeUp(serviceName) {
   await execFile('docker', args, { cwd: APPS_ROOT });
 }
 
-export async function composeRebuild(serviceName) {
-  await execFile('docker', ['compose', '-f', MAIN_COMPOSE, 'up', '-d', '--build', serviceName], { cwd: APPS_ROOT });
+export async function composeRebuild(serviceNames) {
+  const names = Array.isArray(serviceNames) ? serviceNames : [serviceNames];
+  await execFile('docker', ['compose', '-f', MAIN_COMPOSE, 'up', '-d', '--build', ...names], { cwd: APPS_ROOT });
 }
 
 const INFRA_COMPOSE_CONTENT = `services:

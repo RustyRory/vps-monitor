@@ -99,5 +99,5 @@ export async function updateApp(name) {
   safeName(name);
   const appPath = join(APPS_ROOT, name);
   await execFile('git', ['-C', appPath, 'pull']);
-  return getFirstServiceName(name);
+  return getAllServiceNames(name);
 }

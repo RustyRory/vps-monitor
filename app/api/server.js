@@ -253,9 +253,26 @@ app.post('/api/deploy/update', requireAuth, async (req, res) => {
   const { name } = req.body;
   if (!name) return res.status(400).json({ error: 'name requis' });
   try {
-    const service = await updateApp(name);
+    const services = await updateApp(name);
     res.json({ ok: true, building: true });
-    composeRebuild(service).catch((err) => console.error(`[update] build ${name} failed:`, err.message));
+    composeRebuild(services).catch((err) => console.error(`[update] build ${name} failed:`, err.message));
+  } catch (err) {
+    res.status(err.message === 'Nom d\'app invalide' ? 400 : 500).json({ error: err.message });
+  }
+});
+
+app.post('/api/webhook/deploy', async (req, res) => {
+  const auth = req.headers.authorization;
+  const token = process.env.WEBHOOK_SECRET;
+  if (!token || !auth || auth !== `Bearer ${token}`) {
+    return res.status(401).json({ error: 'Non autorisé' });
+  }
+  const { name } = req.body;
+  if (!name) return res.status(400).json({ error: 'name requis' });
+  try {
+    const services = await updateApp(name);
+    res.json({ ok: true, building: true });
+    composeRebuild(services).catch((err) => console.error(`[webhook] build ${name} failed:`, err.message));
   } catch (err) {
     res.status(err.message === 'Nom d\'app invalide' ? 400 : 500).json({ error: err.message });
   }
