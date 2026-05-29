@@ -280,6 +280,7 @@ function promptClone(name) {
 async function cloneNewApp() {
   const name = document.getElementById('clone-name').value.trim();
   const url = document.getElementById('clone-url').value.trim();
+  const branch = document.getElementById('clone-branch').value.trim() || null;
   const nginxPath = document.getElementById('clone-nginx-path').value.trim() || null;
   const port = document.getElementById('clone-nginx-port').value.trim() || null;
   const stripPrefix = !document.getElementById('clone-keep-prefix').checked;
@@ -292,13 +293,14 @@ async function cloneNewApp() {
   const res = await fetch('/api/deploy/clone', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, url, nginxPath, port: port ? parseInt(port, 10) : undefined, stripPrefix }),
+    body: JSON.stringify({ name, url, branch, nginxPath, port: port ? parseInt(port, 10) : undefined, stripPrefix }),
   });
   const data = await res.json();
   statusEl.textContent = res.ok ? `✅ ${name} déployé` : `❌ ${data.error}`;
   if (res.ok) {
     document.getElementById('clone-name').value = '';
     document.getElementById('clone-url').value = '';
+    document.getElementById('clone-branch').value = '';
     document.getElementById('clone-nginx-path').value = '';
     document.getElementById('clone-nginx-port').value = '';
     loadDeploy();
