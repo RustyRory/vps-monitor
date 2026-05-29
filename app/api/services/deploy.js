@@ -101,6 +101,8 @@ export async function updateApp(name) {
   const appPath = join(APPS_ROOT, name);
   const safeDir = [`-c`, `safe.directory=${appPath}`];
   await execFile('git', ['-C', appPath, ...safeDir, 'fetch', 'origin']);
-  await execFile('git', ['-C', appPath, ...safeDir, 'reset', '--hard', 'FETCH_HEAD']);
+  const { stdout } = await execFile('git', ['-C', appPath, ...safeDir, 'rev-parse', '--abbrev-ref', 'HEAD']);
+  const branch = stdout.trim();
+  await execFile('git', ['-C', appPath, ...safeDir, 'reset', '--hard', `origin/${branch}`]);
   return getAllServiceNames(name);
 }
