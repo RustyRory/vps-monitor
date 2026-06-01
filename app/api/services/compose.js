@@ -89,6 +89,10 @@ export async function composeUp(serviceName) {
 
 export async function composeRebuild(serviceNames) {
   const names = Array.isArray(serviceNames) ? serviceNames : [serviceNames];
+  // Arrêt + suppression via compose (containers gérés par ce projet)
+  await execFile('docker', ['compose', '-f', MAIN_COMPOSE, 'rm', '-sf', ...names], { cwd: APPS_ROOT }).catch(() => {});
+  // Suppression forcée des containers orphelins du même nom (ancien projet compose)
+  await Promise.all(names.map((n) => execFile('docker', ['rm', '-f', n]).catch(() => {})));
   await execFile('docker', ['compose', '-f', MAIN_COMPOSE, 'up', '-d', '--build', ...names], { cwd: APPS_ROOT });
 }
 
