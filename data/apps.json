@@ -1,8 +1,74 @@
 [
-  { "name": "sbv",     "url": "https://github.com/RustyRory/SaintBarthVolley.git",  "service": "sbv",     "nginxPath": "/saintbarthvolley/",  "port": 3001 },
-  { "name": "lucky7",  "url": "https://github.com/RustyRory/Lucky7.git",            "service": "lucky7",  "nginxPath": "/lucky7/",            "port": 3002 },
-  { "name": "CollegeLaBoussole", "url": "https://github.com/RustyRory/CollegeLaBoussole.git", "service": "clb", "nginxPath": "/collegelaboussole/", "port": 3007 },
-  { "name": "cinemap", "url": "https://github.com/RustyRory/cinemap.git",            "service": "cinemap", "nginxPath": "/cinemap/",            "port": 3004 },
-  { "name": "tp-vue",  "url": "https://github.com/RustyRory/B3dev-TP_VUE.git",      "service": "tp-vue",  "nginxPath": "/B3dev-TP_VUE/",       "port": 3005 },
-  { "name": "qw-app",  "url": "https://github.com/RustyRory/qw-app.git",            "service": "qw-app",  "nginxPath": "/qw-app/",             "port": 3006 }
+  {
+    "id": "sbv",
+    "name": "sbv",
+    "gitUrl": "https://github.com/RustyRory/SaintBarthVolley.git",
+    "branch": null,
+    "nginxPath": "/saintbarthvolley/",
+    "port": 3001,
+    "stripPrefix": true,
+    "status": "unknown",
+    "lastDeployAt": null,
+    "deployments": []
+  },
+  {
+    "id": "lucky7",
+    "name": "lucky7",
+    "gitUrl": "https://github.com/RustyRory/Lucky7.git",
+    "branch": null,
+    "nginxPath": "/lucky7/",
+    "port": 3002,
+    "stripPrefix": true,
+    "status": "unknown",
+    "lastDeployAt": null,
+    "deployments": []
+  },
+  {
+    "id": "CollegeLaBoussole",
+    "name": "CollegeLaBoussole",
+    "gitUrl": "https://github.com/RustyRory/CollegeLaBoussole.git",
+    "branch": null,
+    "nginxPath": "/collegelaboussole/",
+    "port": 3007,
+    "stripPrefix": true,
+    "status": "unknown",
+    "lastDeployAt": null,
+    "deployments": []
+  },
+  {
+    "id": "cinemap",
+    "name": "cinemap",
+    "gitUrl": "https://github.com/RustyRory/cinemap.git",
+    "branch": null,
+    "nginxPath": "/cinemap/",
+    "port": 3004,
+    "stripPrefix": true,
+    "status": "unknown",
+    "lastDeployAt": null,
+    "deployments": []
+  },
+  {
+    "id": "tp-vue",
+    "name": "tp-vue",
+    "gitUrl": "https://github.com/RustyRory/B3dev-TP_VUE.git",
+    "branch": null,
+    "nginxPath": "/B3dev-TP_VUE/",
+    "port": 3005,
+    "stripPrefix": true,
+    "status": "unknown",
+    "lastDeployAt": null,
+    "deployments": []
+  },
+  {
+    "id": "qw-app",
+    "name": "qw-app",
+    "gitUrl": "https://github.com/RustyRory/qw-app.git",
+    "branch": null,
+    "nginxPath": "/qw-app/",
+    "port": 3006,
+    "stripPrefix": true,
+    "status": "unknown",
+    "lastDeployAt": null,
+    "deployments": []
+  }
 ]

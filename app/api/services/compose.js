@@ -114,6 +114,35 @@ export async function composeRebuild(serviceNames, forceBuild = false) {
   await execFile('docker', args, { cwd: APPS_ROOT });
 }
 
+export async function composeRebuildStreaming(serviceNames, forceBuild = false, onOutput = null) {
+  const { spawn } = await import('child_process');
+  const names = Array.isArray(serviceNames) ? serviceNames : [serviceNames];
+  const build = forceBuild || !(await hasImages(names));
+
+  const emit = (text) => { if (onOutput) onOutput(text); };
+
+  emit(`[vps] Arrêt des containers existants...\n`);
+  await execFile('docker', ['compose', '-f', MAIN_COMPOSE, 'rm', '-sf', ...names], { cwd: APPS_ROOT }).catch(() => {});
+  await Promise.all(names.map((n) => execFile('docker', ['rm', '-f', n]).catch(() => {})));
+
+  const args = ['compose', '-f', MAIN_COMPOSE, 'up', '-d'];
+  if (build) args.push('--build');
+  args.push(...names);
+
+  emit(`[vps] docker ${args.join(' ')}\n`);
+
+  await new Promise((resolve, reject) => {
+    const child = spawn('docker', args, { cwd: APPS_ROOT });
+    child.stdout.on('data', (chunk) => emit(chunk.toString('utf8')));
+    child.stderr.on('data', (chunk) => emit(chunk.toString('utf8')));
+    child.on('close', (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`docker compose exited with code ${code}`));
+    });
+    child.on('error', reject);
+  });
+}
+
 async function freePortsFromCompose(appName) {
   const relPath = await findComposePath(appName);
   try {
