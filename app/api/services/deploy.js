@@ -70,18 +70,14 @@ async function httpHealthcheck(url, timeoutMs = 30000, intervalMs = 2000) {
   return false;
 }
 
-export async function deployProject(projectId, options = {}) {
-  const { env = null, branch = null } = options;
+export async function createDeploymentRecord(projectId, options = {}) {
   safeName(projectId);
+  await getProject(projectId);
 
-  const project = await getProject(projectId);
-  const appPath = join(APPS_ROOT, projectId);
   const deployId = generateDeployId();
-  const timestamp = new Date().toISOString();
-
   const deployment = {
     id: deployId,
-    timestamp,
+    timestamp: new Date().toISOString(),
     commit: null,
     status: 'pending',
     logFile: `${projectId}-${deployId}.log`,
@@ -91,6 +87,15 @@ export async function deployProject(projectId, options = {}) {
 
   await addDeployment(projectId, deployment);
   await setProjectStatus(projectId, 'building');
+  return deployId;
+}
+
+export async function runDeployment(projectId, deployId, options = {}) {
+  const { env = null, branch = null } = options;
+  safeName(projectId);
+
+  const project = await getProject(projectId);
+  const appPath = join(APPS_ROOT, projectId);
 
   const buildSession = await startBuildSession(projectId, deployId);
   const startTime = Date.now();
@@ -212,6 +217,14 @@ export async function syncProjectStatus(projectId) {
     await setProjectStatus(projectId, 'unknown');
     return 'unknown';
   }
+}
+
+// Convenience wrapper: create record + fire async run
+export async function deployProject(projectId, options = {}) {
+  const deployId = await createDeploymentRecord(projectId, options);
+  runDeployment(projectId, deployId, options)
+    .catch((err) => console.error(`[deploy] ${projectId}:`, err.message));
+  return deployId;
 }
 
 export { getProjects, getProject, addProject, deleteProject };

@@ -1,167 +1,21 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>VPS Monitor</title>
-  <link rel="stylesheet" href="style.css" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>vps-monitor</title>
+  <link rel="stylesheet" href="./style.css">
 </head>
 <body>
-  <header>
-    <h1>VPS Monitor</h1>
-    <div id="global-status" class="badge">--</div>
-    <div id="summary" class="summary"></div>
-    <button class="logout-btn" onclick="logout()">Déconnexion</button>
-  </header>
-
-  <nav class="tabs">
-    <button class="tab-btn active" onclick="showTab('monitoring')">Monitoring</button>
-    <button class="tab-btn" onclick="showTab('configs')">Configs</button>
-    <button class="tab-btn" onclick="showTab('deploy')">Déploiement</button>
-  </nav>
-
-  <main>
-    <div id="tab-monitoring" class="tab-panel">
-      <section>
-        <h2>Containers Docker</h2>
-        <div id="containers" class="grid"></div>
-      </section>
-      <section>
-        <h2>Applications web</h2>
-        <div id="websites" class="grid"></div>
-      </section>
-    </div>
-
-    <div id="tab-configs" class="tab-panel hidden">
-      <section>
-        <h2>apps.json</h2>
-        <textarea id="apps-json-editor" class="json-editor" spellcheck="false"></textarea>
-        <div class="json-editor-footer">
-          <span id="apps-json-status" class="clone-status"></span>
-          <button onclick="saveAppsJson()">Sauvegarder</button>
-        </div>
-      </section>
-      <section>
-        <h2>Configuration Nginx</h2>
-        <p id="nginx-server-info" class="nginx-meta"></p>
-        <div id="nginx-apps" class="grid"></div>
-        <div class="clone-form">
-          <h3>Ajouter une application</h3>
-          <div class="clone-inputs">
-            <input id="nginx-add-path" type="text" placeholder="/mon-app/" />
-            <input id="nginx-add-port" type="number" min="1" max="65535" placeholder="3007" />
-            <button onclick="nginxAddApp()">Ajouter</button>
-          </div>
-          <div class="clone-inputs">
-            <label style="font-size:.85rem;display:flex;align-items:center;gap:.4rem;cursor:pointer">
-              <input id="nginx-add-keep-prefix" type="checkbox" />
-              Conserver le préfixe <span style="color:var(--muted,#888)">(Next.js / apps avec basePath)</span>
-            </label>
-          </div>
-          <div id="nginx-status" class="clone-status"></div>
-        </div>
-      </section>
-    </div>
-
-    <div id="tab-deploy" class="tab-panel hidden">
-      <section>
-        <h2>Applications déployées</h2>
-        <div id="deploy-apps" class="grid"></div>
-        <div class="clone-form">
-          <h2>Déployer une nouvelle app</h2>
-          <div class="clone-inputs">
-            <input id="clone-name" type="text" placeholder="nom (ex: sbv)" />
-            <input id="clone-url" type="text" placeholder="https://github.com/…" />
-          </div>
-          <div class="clone-inputs">
-            <input id="clone-branch" type="text" placeholder="Branche (ex: staging) — vide pour défaut" />
-          </div>
-          <div class="clone-inputs clone-inputs--nginx">
-            <input id="clone-nginx-path" type="text" placeholder="Chemin nginx (ex: /sbv/) — vide si pas de web" />
-            <input id="clone-nginx-port" type="number" min="1" max="65535" placeholder="Port (ex: 3001)" />
-          </div>
-          <div class="clone-inputs">
-            <label style="font-size:.85rem;display:flex;align-items:center;gap:.4rem;cursor:pointer">
-              <input id="clone-keep-prefix" type="checkbox" />
-              Conserver le préfixe <span style="color:var(--muted,#888)">(Next.js / apps avec basePath)</span>
-            </label>
-          </div>
-          <div class="clone-inputs">
-            <label style="font-size:.85rem;display:flex;align-items:center;gap:.4rem;cursor:pointer">
-              <input id="clone-has-env" type="checkbox" onchange="toggleEnvSection()" />
-              Définir le <code>.env</code> avant le build
-            </label>
-          </div>
-          <div id="clone-env-section" class="clone-env-section hidden">
-            <div class="clone-env-header">
-              <span>Variables d'environnement</span>
-              <button class="env-example-btn" onclick="loadCloneEnvExample()">Charger .env.example</button>
-            </div>
-            <textarea id="clone-env-content" class="env-editor" spellcheck="false" placeholder="# Colle ici le contenu de ton .env&#10;DATABASE_URL=..."></textarea>
-          </div>
-          <div class="clone-inputs">
-            <button onclick="cloneNewApp()">Déployer</button>
-          </div>
-          <div id="clone-status" class="clone-status"></div>
-        </div>
-      </section>
-    </div>
-  </main>
-
-  <div id="logs-modal" class="modal-overlay hidden" onclick="if(event.target===this)closeLogs()">
-    <div class="modal">
-      <div class="modal-header">
-        <span id="logs-title"></span>
-        <div class="modal-actions">
-          <button id="copy-logs-btn" class="modal-copy" onclick="copyLogs()">Copier</button>
-          <button class="modal-close" onclick="closeLogs()">✕</button>
-        </div>
-      </div>
-      <pre id="logs-content" class="logs-content"></pre>
-    </div>
+  <div id="app">
+    <aside id="sidebar"></aside>
+    <main id="main">
+      <div class="loading-state">Chargement…</div>
+    </main>
   </div>
-
-  <div id="env-modal" class="modal-overlay hidden" onclick="if(event.target===this)closeEnvModal()">
-    <div class="modal">
-      <div class="modal-header">
-        <span id="env-modal-title">Variables d'environnement</span>
-        <div class="modal-actions">
-          <button class="modal-copy env-example-btn" onclick="loadEnvExample()">Charger .env.example</button>
-          <button class="modal-close" onclick="closeEnvModal()">✕</button>
-        </div>
-      </div>
-      <textarea id="env-modal-content" class="env-editor env-editor--modal" spellcheck="false"></textarea>
-      <div class="modal-footer">
-        <span id="env-modal-status" class="clone-status"></span>
-        <div style="display:flex;gap:.5rem">
-          <button onclick="saveEnv(false)">Sauvegarder</button>
-          <button onclick="saveEnv(true)">Sauvegarder et reconstruire</button>
-        </div>
-      </div>
-    </div>
+  <div id="modal-overlay" class="hidden">
+    <div id="modal-box"></div>
   </div>
-
-  <div id="exec-modal" class="modal-overlay hidden" onclick="if(event.target===this)closeExecModal()">
-    <div class="modal">
-      <div class="modal-header">
-        <span id="exec-modal-title">Exec</span>
-        <button class="modal-close" onclick="closeExecModal()">✕</button>
-      </div>
-      <div style="padding:.75rem 1rem;display:flex;flex-direction:column;gap:.5rem">
-        <div style="display:flex;gap:.5rem;align-items:center">
-          <label style="font-size:.85rem;white-space:nowrap">Container :</label>
-          <input id="exec-container" type="text" style="flex:1;font-family:monospace;font-size:.85rem" />
-        </div>
-        <div style="display:flex;gap:.5rem;align-items:center">
-          <label style="font-size:.85rem;white-space:nowrap">Commande :</label>
-          <input id="exec-cmd" type="text" style="flex:1;font-family:monospace;font-size:.85rem" placeholder="npm run seed:prod" />
-        </div>
-        <button onclick="runExec()">Exécuter</button>
-      </div>
-      <pre id="exec-output" class="logs-content" style="min-height:80px"></pre>
-    </div>
-  </div>
-
-  <script src="app.js"></script>
+  <script type="module" src="./app.js"></script>
 </body>
 </html>

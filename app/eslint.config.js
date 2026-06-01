@@ -38,6 +38,7 @@ export default [
   {
     files: ['public/**/*.js'],
     languageOptions: {
+      sourceType: 'module',
       globals: {
         fetch: 'readonly',
         document: 'readonly',
@@ -54,10 +55,11 @@ export default [
         alert: 'readonly',
         URL: 'readonly',
         URLSearchParams: 'readonly',
+        history: 'readonly',
       },
     },
     rules: {
-      'no-unused-vars': ['warn', { varsIgnorePattern: '^(containerAction|logout|showLogs|closeLogs|showTab|saveAppsJson|nginxAddApp|nginxRemoveApp|updateDeployApp|promptClone|cloneNewApp|removeContainer|deleteDeployApp)$' }],
+      'no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
     },
   },
 ];

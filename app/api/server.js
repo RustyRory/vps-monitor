@@ -17,7 +17,8 @@ import {
 } from './services/nginx.js';
 import {
   getProjects, getProject, addProject, updateProject, deleteProject,
-  deployProject, deleteProjectFiles, syncProjectStatus,
+  createDeploymentRecord, runDeployment,
+  deleteProjectFiles, syncProjectStatus,
   readEnvFile, writeEnvFile, readEnvExample,
 } from './services/deploy.js';
 import { getAllServiceNames, composeFullRestart, ensureInfraInclude, composeUp } from './services/compose.js';
@@ -246,7 +247,6 @@ app.post('/api/projects/:id/deployments', requireAuth, async (req, res) => {
   try {
     const project = await getProject(req.params.id);
 
-    // Setup nginx if project has a path/port and it's a new deploy
     if (project.nginxPath && project.port) {
       const config = await readConfig().catch(() => '');
       if (!config.includes(project.nginxPath)) {
@@ -255,8 +255,10 @@ app.post('/api/projects/:id/deployments', requireAuth, async (req, res) => {
       }
     }
 
-    res.json({ ok: true, building: true });
-    deployProject(req.params.id, { env, branch, triggeredBy: 'manual' })
+    const opts = { env, branch, triggeredBy: 'manual' };
+    const deployId = await createDeploymentRecord(req.params.id, opts);
+    res.json({ ok: true, deployId, building: true });
+    runDeployment(req.params.id, deployId, opts)
       .catch((err) => console.error(`[deploy] ${req.params.id}:`, err.message));
   } catch (err) {
     res.status(err.message.includes('introuvable') ? 404 : 500).json({ error: err.message });
@@ -288,11 +290,14 @@ app.put('/api/projects/:id/env', requireAuth, async (req, res) => {
   if (content === undefined) return res.status(400).json({ error: 'content requis' });
   try {
     await writeEnvFile(req.params.id, content);
-    res.json({ ok: true, building: rebuild });
+    let deployId = null;
     if (rebuild) {
-      deployProject(req.params.id, { triggeredBy: 'env-update' })
+      const opts = { triggeredBy: 'env-update' };
+      deployId = await createDeploymentRecord(req.params.id, opts);
+      runDeployment(req.params.id, deployId, opts)
         .catch((err) => console.error(`[env-rebuild] ${req.params.id}:`, err.message));
     }
+    res.json({ ok: true, building: rebuild, deployId });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -409,8 +414,10 @@ app.post('/api/webhook/:id', async (req, res) => {
   }
   try {
     await getProject(req.params.id);
-    res.json({ ok: true, building: true });
-    deployProject(req.params.id, { triggeredBy: 'webhook' })
+    const opts = { triggeredBy: 'webhook' };
+    const deployId = await createDeploymentRecord(req.params.id, opts);
+    res.json({ ok: true, deployId, building: true });
+    runDeployment(req.params.id, deployId, opts)
       .catch((err) => console.error(`[webhook] ${req.params.id}:`, err.message));
   } catch (err) {
     res.status(err.message.includes('introuvable') ? 404 : 500).json({ error: err.message });
