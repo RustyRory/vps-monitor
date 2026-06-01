@@ -76,6 +76,14 @@ async function showLogs(name) {
   };
 }
 
+async function copyLogs() {
+  const content = document.getElementById('logs-content').textContent;
+  const btn = document.getElementById('copy-logs-btn');
+  await navigator.clipboard.writeText(content);
+  btn.textContent = 'Copié !';
+  setTimeout(() => { btn.textContent = 'Copier'; }, 2000);
+}
+
 function closeLogs() {
   if (activeLogSocket) {
     activeLogSocket.close();

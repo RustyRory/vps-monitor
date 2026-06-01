@@ -395,6 +395,30 @@ section {
   color: #aaa;
 }
 
+.modal-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.modal-copy {
+  background: transparent;
+  border: 1px solid #333;
+  border-radius: 4px;
+  color: #666;
+  font-family: monospace;
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 0.15rem 0.6rem;
+  line-height: 1.4;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.modal-copy:hover {
+  color: #e0e0e0;
+  border-color: #555;
+}
+
 .modal-close {
   background: transparent;
   border: none;
