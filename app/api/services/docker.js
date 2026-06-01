@@ -59,3 +59,19 @@ export async function getContainers() {
     uptime: c.Status,
   }));
 }
+
+export async function getContainersByNames(names) {
+  const all = await docker.listContainers({ all: true });
+  const nameSet = new Set(names);
+  return all
+    .filter((c) => c.Names.some((n) => nameSet.has(n.replace(/^\//, ''))))
+    .map((c) => ({
+      name: c.Names[0].replace(/^\//, ''),
+      status: c.State,
+      image: c.Image,
+      ports: [...new Set(c.Ports.map((p) =>
+        p.PublicPort ? `${p.PublicPort}:${p.PrivatePort}` : `${p.PrivatePort}`
+      ))],
+      uptime: c.Status,
+    }));
+}
