@@ -114,13 +114,29 @@ export async function composeRebuild(serviceNames, forceBuild = false) {
   await execFile('docker', args, { cwd: APPS_ROOT });
 }
 
+async function freePortsFromCompose(appName) {
+  const relPath = await findComposePath(appName);
+  try {
+    const content = await readFile(join(APPS_ROOT, relPath), 'utf8');
+    const ports = [...content.matchAll(/127\.0\.0\.1:(\d+):/g)].map((m) => m[1]);
+    for (const port of ports) {
+      const { stdout } = await execFile('docker', ['ps', '-a', '-q', '--filter', `publish=${port}`], {}).catch(() => ({ stdout: '' }));
+      const ids = stdout.trim().split('\n').filter(Boolean);
+      await Promise.all(ids.map((id) => execFile('docker', ['rm', '-f', id]).catch(() => {})));
+    }
+  } catch { /* ignore */ }
+}
+
 export async function composeFullRestart(appName) {
   const allServices = await getAllServiceNames(appName);
   console.log(`[full-restart] ${appName}: services = [${allServices.join(', ')}]`);
 
-  // Suppression de tous les containers
+  // Suppression de tous les containers de l'app
   await execFile('docker', ['compose', '-f', MAIN_COMPOSE, 'rm', '-sf', ...allServices], { cwd: APPS_ROOT }).catch(() => {});
   await Promise.all(allServices.map((n) => execFile('docker', ['rm', '-f', n]).catch(() => {})));
+
+  // Libération forcée des ports utilisés par l'app (au cas où un container orphelin les tient)
+  await freePortsFromCompose(appName);
 
   // Suppression puis recréation d'un réseau dédié propre
   const networkName = `${appName}-net`;
