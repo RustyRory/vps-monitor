@@ -278,6 +278,26 @@ app.put('/api/deploy/apps/:name/env', requireAuth, async (req, res) => {
   }
 });
 
+app.get('/api/diagnostics/networks', requireAuth, async (req, res) => {
+  try {
+    const { execFile: ef } = await import('child_process');
+    const { promisify } = await import('util');
+    const exec = promisify(ef);
+    const { stdout: lsOut } = await exec('docker', ['network', 'ls', '--format', '{{.Name}}']);
+    const names = lsOut.trim().split('\n').filter(Boolean);
+    const details = await Promise.all(names.map(async (n) => {
+      try {
+        const { stdout } = await exec('docker', ['network', 'inspect', n, '--format',
+          '{{.Name}}: {{range $k,$v := .Containers}}{{$v.Name}} {{end}}']);
+        return stdout.trim();
+      } catch { return `${n}: error`; }
+    }));
+    res.json({ networks: details });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/deploy/apps/:name/full-restart', requireAuth, async (req, res) => {
   const { name } = req.params;
   try {

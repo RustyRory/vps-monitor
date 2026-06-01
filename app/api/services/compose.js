@@ -116,13 +116,27 @@ export async function composeRebuild(serviceNames, forceBuild = false) {
 
 export async function composeFullRestart(appName) {
   const allServices = await getAllServiceNames(appName);
+  console.log(`[full-restart] ${appName}: services détectés = [${allServices.join(', ')}]`);
+
   // Suppression de tous les containers de l'app (y compris bases de données)
   await execFile('docker', ['compose', '-f', MAIN_COMPOSE, 'rm', '-sf', ...allServices], { cwd: APPS_ROOT }).catch(() => {});
   await Promise.all(allServices.map((n) => execFile('docker', ['rm', '-f', n]).catch(() => {})));
-  // Nettoyage des réseaux orphelins liés à l'app
-  await execFile('docker', ['network', 'rm', `${appName}-net`, `${appName}_net`], {}).catch(() => {});
-  // Redémarrage sans rebuild — on repart des images existantes pour remettre tout le monde sur le même réseau
+
+  // Suppression des réseaux orphelins liés à l'app
+  const networkName = `${appName}-net`;
+  await execFile('docker', ['network', 'rm', networkName, `${appName}_net`], {}).catch(() => {});
+
+  // Création d'un réseau dédié pour l'app
+  await execFile('docker', ['network', 'create', networkName], {}).catch(() => {});
+
+  // Démarrage de tous les containers
   await execFile('docker', ['compose', '-f', MAIN_COMPOSE, 'up', '-d', ...allServices], { cwd: APPS_ROOT });
+
+  // Connexion explicite de tous les containers au réseau partagé (quel que soit leur réseau actuel)
+  await Promise.all(
+    allServices.map((n) => execFile('docker', ['network', 'connect', networkName, n]).catch(() => {}))
+  );
+  console.log(`[full-restart] ${appName}: tous les containers connectés à ${networkName}`);
 }
 
 const INFRA_COMPOSE_CONTENT = `services:
