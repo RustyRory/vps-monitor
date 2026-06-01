@@ -10,7 +10,7 @@ import { getContainers, restartContainer, stopContainer, startContainer, removeC
 import { checkWebsites } from './services/http.js';
 import { reload as reloadNginx, readConfig, writeConfig, parseApps, parseConfigMeta, addApp, removeApp } from './services/nginx.js';
 import { listApps, cloneApp, updateApp, deleteApp, getAppStatus, writeEnvFile, readEnvFile, readEnvExample } from './services/deploy.js';
-import { composeUp, composeRebuild, getAllServiceNames, ensureInfraInclude } from './services/compose.js';
+import { composeUp, composeRebuild, composeFullRestart, getAllServiceNames, ensureInfraInclude } from './services/compose.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -275,6 +275,16 @@ app.put('/api/deploy/apps/:name/env', requireAuth, async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     res.status(err.message === 'Nom d\'app invalide' ? 400 : 500).json({ error: err.message });
+  }
+});
+
+app.post('/api/deploy/apps/:name/full-restart', requireAuth, async (req, res) => {
+  const { name } = req.params;
+  try {
+    res.json({ ok: true, restarting: true });
+    composeFullRestart(name).catch((err) => console.error(`[full-restart] ${name} failed:`, err.message));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

@@ -251,6 +251,7 @@ function renderDeployApps(apps) {
       <div class="card-actions">
         ${a.deployed
           ? `<button onclick="updateDeployApp('${a.name}', this)">Mettre à jour</button>
+             <button onclick="fullRestartApp('${a.name}', this)" title="Redémarre tous les containers (backend, frontend, BDD…) sur le même réseau">Redémarrage complet</button>
              <button onclick="openEnvModal('${a.name}')">Éditer .env</button>`
           : `<button onclick="promptClone('${a.name}')">Déployer</button>`
         }
@@ -288,6 +289,15 @@ async function updateDeployApp(name, btn) {
   });
   btn.textContent = res.ok ? '✅' : '❌';
   setTimeout(() => loadDeploy(), 1500);
+}
+
+async function fullRestartApp(name, btn) {
+  if (!confirm(`Redémarrer tous les containers de "${name}" ? (BDD incluse — quelques secondes d'interruption)`)) return;
+  btn.disabled = true;
+  btn.textContent = '…';
+  const res = await fetch(`/api/deploy/apps/${encodeURIComponent(name)}/full-restart`, { method: 'POST' });
+  btn.textContent = res.ok ? '✅' : '❌';
+  setTimeout(() => { btn.disabled = false; btn.textContent = 'Redémarrage complet'; loadDeploy(); }, 3000);
 }
 
 function toggleEnvSection() {

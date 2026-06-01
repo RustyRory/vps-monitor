@@ -114,6 +114,15 @@ export async function composeRebuild(serviceNames, forceBuild = false) {
   await execFile('docker', args, { cwd: APPS_ROOT });
 }
 
+export async function composeFullRestart(appName) {
+  const allServices = await getAllServiceNames(appName);
+  // Suppression de tous les containers de l'app (y compris bases de données)
+  await execFile('docker', ['compose', '-f', MAIN_COMPOSE, 'rm', '-sf', ...allServices], { cwd: APPS_ROOT }).catch(() => {});
+  await Promise.all(allServices.map((n) => execFile('docker', ['rm', '-f', n]).catch(() => {})));
+  // Redémarrage avec rebuild pour les services qui ont un Dockerfile
+  await execFile('docker', ['compose', '-f', MAIN_COMPOSE, 'up', '-d', '--build', ...allServices], { cwd: APPS_ROOT });
+}
+
 const INFRA_COMPOSE_CONTENT = `services:
   mongo:
     image: mongo:7
