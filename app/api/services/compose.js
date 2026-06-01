@@ -119,8 +119,10 @@ export async function composeFullRestart(appName) {
   // Suppression de tous les containers de l'app (y compris bases de données)
   await execFile('docker', ['compose', '-f', MAIN_COMPOSE, 'rm', '-sf', ...allServices], { cwd: APPS_ROOT }).catch(() => {});
   await Promise.all(allServices.map((n) => execFile('docker', ['rm', '-f', n]).catch(() => {})));
-  // Redémarrage avec rebuild pour les services qui ont un Dockerfile
-  await execFile('docker', ['compose', '-f', MAIN_COMPOSE, 'up', '-d', '--build', ...allServices], { cwd: APPS_ROOT });
+  // Nettoyage des réseaux orphelins liés à l'app
+  await execFile('docker', ['network', 'rm', `${appName}-net`, `${appName}_net`], {}).catch(() => {});
+  // Redémarrage sans rebuild — on repart des images existantes pour remettre tout le monde sur le même réseau
+  await execFile('docker', ['compose', '-f', MAIN_COMPOSE, 'up', '-d', ...allServices], { cwd: APPS_ROOT });
 }
 
 const INFRA_COMPOSE_CONTENT = `services:
