@@ -99,6 +99,20 @@ app.get('/api/status', requireAuth, async (_req, res) => {
   }
 });
 
+app.post('/api/container/exec', requireAuth, async (req, res) => {
+  const { name, cmd } = req.body;
+  if (!name || !cmd) return res.status(400).json({ error: 'name et cmd requis' });
+  try {
+    const { execFile: ef } = await import('child_process');
+    const { promisify } = await import('util');
+    const exec = promisify(ef);
+    const { stdout, stderr } = await exec('docker', ['exec', name, 'sh', '-c', cmd]);
+    res.json({ ok: true, stdout: stdout.trim(), stderr: stderr.trim() });
+  } catch (err) {
+    res.status(500).json({ error: err.message, stdout: err.stdout?.trim(), stderr: err.stderr?.trim() });
+  }
+});
+
 app.post('/api/container/restart', requireAuth, async (req, res) => {
   const { name } = req.body;
   if (!name) return res.status(400).json({ error: 'name requis' });

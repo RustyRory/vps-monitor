@@ -141,6 +141,27 @@
     </div>
   </div>
 
+  <div id="exec-modal" class="modal-overlay hidden" onclick="if(event.target===this)closeExecModal()">
+    <div class="modal">
+      <div class="modal-header">
+        <span id="exec-modal-title">Exec</span>
+        <button class="modal-close" onclick="closeExecModal()">✕</button>
+      </div>
+      <div style="padding:.75rem 1rem;display:flex;flex-direction:column;gap:.5rem">
+        <div style="display:flex;gap:.5rem;align-items:center">
+          <label style="font-size:.85rem;white-space:nowrap">Container :</label>
+          <input id="exec-container" type="text" style="flex:1;font-family:monospace;font-size:.85rem" />
+        </div>
+        <div style="display:flex;gap:.5rem;align-items:center">
+          <label style="font-size:.85rem;white-space:nowrap">Commande :</label>
+          <input id="exec-cmd" type="text" style="flex:1;font-family:monospace;font-size:.85rem" placeholder="npm run seed:prod" />
+        </div>
+        <button onclick="runExec()">Exécuter</button>
+      </div>
+      <pre id="exec-output" class="logs-content" style="min-height:80px"></pre>
+    </div>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>

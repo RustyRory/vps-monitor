@@ -252,6 +252,7 @@ function renderDeployApps(apps) {
         ${a.deployed
           ? `<button onclick="updateDeployApp('${a.name}', this)">Mettre à jour</button>
              <button onclick="fullRestartApp('${a.name}', this)" title="Redémarre tous les containers (backend, frontend, BDD…) sur le même réseau">Redémarrage complet</button>
+             <button onclick="openExecModal('${a.name}')">Exec</button>
              <button onclick="openEnvModal('${a.name}')">Éditer .env</button>`
           : `<button onclick="promptClone('${a.name}')">Déployer</button>`
         }
@@ -289,6 +290,33 @@ async function updateDeployApp(name, btn) {
   });
   btn.textContent = res.ok ? '✅' : '❌';
   setTimeout(() => loadDeploy(), 1500);
+}
+
+function openExecModal(appName) {
+  document.getElementById('exec-modal-title').textContent = `Exec — ${appName}`;
+  document.getElementById('exec-container').value = `${appName}-backend`;
+  document.getElementById('exec-cmd').value = 'npm run seed:prod';
+  document.getElementById('exec-output').textContent = '';
+  document.getElementById('exec-modal').classList.remove('hidden');
+}
+
+function closeExecModal() {
+  document.getElementById('exec-modal').classList.add('hidden');
+}
+
+async function runExec() {
+  const name = document.getElementById('exec-container').value.trim();
+  const cmd = document.getElementById('exec-cmd').value.trim();
+  const out = document.getElementById('exec-output');
+  if (!name || !cmd) return;
+  out.textContent = '…';
+  const res = await fetch('/api/container/exec', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, cmd }),
+  });
+  const data = await res.json().catch(() => ({}));
+  out.textContent = [data.stdout, data.stderr, data.error].filter(Boolean).join('\n') || '(aucun output)';
 }
 
 async function fullRestartApp(name, btn) {
