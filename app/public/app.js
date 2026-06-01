@@ -79,7 +79,17 @@ async function showLogs(name) {
 async function copyLogs() {
   const content = document.getElementById('logs-content').textContent;
   const btn = document.getElementById('copy-logs-btn');
-  await navigator.clipboard.writeText(content);
+  try {
+    await navigator.clipboard.writeText(content);
+  } catch {
+    const ta = document.createElement('textarea');
+    ta.value = content;
+    ta.style.cssText = 'position:fixed;opacity:0;pointer-events:none';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+  }
   btn.textContent = 'Copié !';
   setTimeout(() => { btn.textContent = 'Copier'; }, 2000);
 }
