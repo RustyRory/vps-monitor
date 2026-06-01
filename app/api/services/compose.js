@@ -81,19 +81,37 @@ export async function getAllServiceNames(name) {
   }
 }
 
+async function hasImages(serviceNames) {
+  const checks = await Promise.all(
+    serviceNames.map(async (name) => {
+      try {
+        const { stdout } = await execFile('docker', ['compose', '-f', MAIN_COMPOSE, 'images', '-q', name], { cwd: APPS_ROOT });
+        return stdout.trim().length > 0;
+      } catch {
+        return false;
+      }
+    }),
+  );
+  return checks.every(Boolean);
+}
+
 export async function composeUp(serviceName) {
   const args = ['compose', '-f', MAIN_COMPOSE, 'up', '-d'];
   if (serviceName) args.push(serviceName);
   await execFile('docker', args, { cwd: APPS_ROOT });
 }
 
-export async function composeRebuild(serviceNames) {
+export async function composeRebuild(serviceNames, forceBuild = false) {
   const names = Array.isArray(serviceNames) ? serviceNames : [serviceNames];
+  const build = forceBuild || !(await hasImages(names));
   // Arrêt + suppression via compose (containers gérés par ce projet)
   await execFile('docker', ['compose', '-f', MAIN_COMPOSE, 'rm', '-sf', ...names], { cwd: APPS_ROOT }).catch(() => {});
   // Suppression forcée des containers orphelins du même nom (ancien projet compose)
   await Promise.all(names.map((n) => execFile('docker', ['rm', '-f', n]).catch(() => {})));
-  await execFile('docker', ['compose', '-f', MAIN_COMPOSE, 'up', '-d', '--build', ...names], { cwd: APPS_ROOT });
+  const args = ['compose', '-f', MAIN_COMPOSE, 'up', '-d'];
+  if (build) args.push('--build');
+  args.push(...names);
+  await execFile('docker', args, { cwd: APPS_ROOT });
 }
 
 const INFRA_COMPOSE_CONTENT = `services:

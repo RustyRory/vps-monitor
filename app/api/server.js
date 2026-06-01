@@ -10,7 +10,7 @@ import { getContainers, restartContainer, stopContainer, startContainer, removeC
 import { checkWebsites } from './services/http.js';
 import { reload as reloadNginx, readConfig, writeConfig, parseApps, parseConfigMeta, addApp, removeApp } from './services/nginx.js';
 import { listApps, cloneApp, updateApp, deleteApp, getAppStatus } from './services/deploy.js';
-import { composeUp, composeRebuild, ensureInfraInclude } from './services/compose.js';
+import { composeUp, composeRebuild, getAllServiceNames, ensureInfraInclude } from './services/compose.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -241,8 +241,9 @@ app.post('/api/deploy/clone', requireAuth, async (req, res) => {
       await addApp(nginxPath, parsedPort, stripPrefix);
       await reloadNginx();
     }
+    const allServices = await getAllServiceNames(name).catch(() => [service]);
     res.json({ ok: true, building: true });
-    composeUp(service).catch((err) => console.error(`[clone] build ${name} failed:`, err.message));
+    composeRebuild(allServices).catch((err) => console.error(`[clone] build ${name} failed:`, err.message));
   } catch (err) {
     const status = ['Nom d\'app invalide', 'URL invalide'].includes(err.message) ? 400 : 500;
     res.status(status).json({ error: err.message });
@@ -255,7 +256,7 @@ app.post('/api/deploy/update', requireAuth, async (req, res) => {
   try {
     const services = await updateApp(name);
     res.json({ ok: true, building: true });
-    composeRebuild(services).catch((err) => console.error(`[update] build ${name} failed:`, err.message));
+    composeRebuild(services, true).catch((err) => console.error(`[update] build ${name} failed:`, err.message));
   } catch (err) {
     res.status(err.message === 'Nom d\'app invalide' ? 400 : 500).json({ error: err.message });
   }
@@ -272,7 +273,7 @@ app.post('/api/webhook/deploy', async (req, res) => {
   try {
     const services = await updateApp(name);
     res.json({ ok: true, building: true });
-    composeRebuild(services).catch((err) => console.error(`[webhook] build ${name} failed:`, err.message));
+    composeRebuild(services, true).catch((err) => console.error(`[webhook] build ${name} failed:`, err.message));
   } catch (err) {
     res.status(err.message === 'Nom d\'app invalide' ? 400 : 500).json({ error: err.message });
   }
