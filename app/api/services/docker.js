@@ -25,6 +25,11 @@ export async function startContainer(name) {
   await container.start();
 }
 
+export async function removeContainer(name) {
+  const container = await getContainer(name);
+  await container.remove({ force: false });
+}
+
 export async function streamContainerLogs(name, tail, onData, onEnd) {
   const container = await getContainer(name);
   const logStream = await container.logs({ stdout: true, stderr: true, tail, follow: true });
@@ -53,4 +58,20 @@ export async function getContainers() {
     ))],
     uptime: c.Status,
   }));
+}
+
+export async function getContainersByNames(names) {
+  const all = await docker.listContainers({ all: true });
+  const nameSet = new Set(names);
+  return all
+    .filter((c) => c.Names.some((n) => nameSet.has(n.replace(/^\//, ''))))
+    .map((c) => ({
+      name: c.Names[0].replace(/^\//, ''),
+      status: c.State,
+      image: c.Image,
+      ports: [...new Set(c.Ports.map((p) =>
+        p.PublicPort ? `${p.PublicPort}:${p.PrivatePort}` : `${p.PrivatePort}`
+      ))],
+      uptime: c.Status,
+    }));
 }

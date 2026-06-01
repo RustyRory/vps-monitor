@@ -1,8 +1,0 @@
-[
-  { "name": "sbv",              "url": "https://github.com/RustyRory/SaintBarthVolley.git" },
-  { "name": "lucky7",           "url": "https://github.com/RustyRory/Lucky7.git" },
-  { "name": "clb",              "url": "https://github.com/RustyRory/CollegeLaBoussole.git" },
-  { "name": "cinemap",          "url": "https://github.com/RustyRory/cinemap.git" },
-  { "name": "tp-vue",           "url": "https://github.com/RustyRory/B3dev-TP_VUE.git" },
-  { "name": "qw-app",           "url": "https://github.com/RustyRory/qw-app.git" }
-]

@@ -346,15 +346,6 @@ docker logs <container> --follow   # comportement attendu
 
 ---
 
-### Étape 16 — Évolutions futures
-
-À planifier selon les besoins :
-
-- Alertes email quand un service tombe
-- Historique d'uptime (stockage en fichier ou SQLite)
-- Graphiques CPU / RAM via `dockerode.stats`
-- Support multi-serveurs
-
 ## Phase 5 — GitOps Dashboard
 
 ### Contexte & État actuel
@@ -728,13 +719,11 @@ docker compose up -d vps-monitor
 
 ---
 
-### Récapitulatif des fichiers à créer / modifier
+### Récapitulatif des fichiers à créer / modifier (plan initial)
 
 | Fichier | Action |
 |---------|--------|
 | `vps-monitor-app/` → `app/` | Renommer |
-| `nginx/sites-enabled/vps` | Créer (depuis vps-config) |
-| `apps/*/docker-compose.yml` | Créer (depuis vps-config) |
 | `app/api/services/git.js` | Créer |
 | `app/api/services/nginx.js` | Créer |
 | `app/api/services/deploy.js` | Créer |
@@ -742,8 +731,302 @@ docker compose up -d vps-monitor
 | `app/public/index.html` | Modifier (nouveaux onglets) |
 | `app/public/app.js` | Modifier (logique nouveaux onglets) |
 | `app/public/style.css` | Modifier (styles éditeur + déploiement) |
-| `.env.example` | Modifier (ajout GITHUB_TOKEN, VPSCONFIG_PATH) |
-| `README.md` | Réécrire |
-| `vps-config` (repo GitHub) | Archiver / supprimer |
+| `.env.example` | Modifier (VPSCONFIG_PATH) |
+
+---
+
+### Notes d'implémentation — écarts par rapport au plan
+
+#### `git.js` — non implémenté
+Le push git depuis le dashboard a été écarté. Les apps gèrent leur propre dépôt. vps-monitor se contente de `git clone` / `git pull`.
+
+#### `nginx.js` — implémenté différemment
+Pas d'éditeur de fichier nginx complet. À la place : ajout/suppression de blocs `location` via des fonctions dédiées (`addApp`, `removeApp`). La validation `nginx -t` a été retirée des routes — le binaire nginx du VPS (Ubuntu/glibc) ne peut pas s'exécuter dans le container Alpine (musl libc). nginx refuse le reload si la config est invalide, ce qui sert de filet de sécurité.
+
+#### `compose.js` — nouveau service (non prévu)
+Gère le fichier `/var/www/docker-compose.yml` global via des includes Docker Compose. Fonctions : `addInclude`, `removeInclude`, `listIncludes`, `composeUp`, `composeRebuild`, `composeDown`, `composeIsRunning`.
+
+#### `deploy.js` — `deleteApp` ajouté (non prévu)
+En plus des fonctions prévues, `deleteApp` : arrête le container (`composeDown`), retire l'include du compose global, supprime l'entrée dans `apps.json`, supprime le dossier `/var/www/<nom>`, et nettoie le bloc nginx si applicable.
+
+#### Build asynchrone — clone et update non-bloquants
+`cloneApp` et `updateApp` ne lancent plus le build Docker dans leur propre `await`. Ils retournent le nom du service et c'est `server.js` qui déclenche `composeUp` / `composeRebuild` **après avoir envoyé la réponse HTTP**, via `.catch()` pour logger les erreurs en background.
+
+Raison : le build de certaines apps (multi-services, npm install + Vite) dépasse le timeout nginx de 60s → 504 Gateway Timeout côté client. Le dashboard reçoit `{ ok: true, building: true }` immédiatement, et l'app passe à l'état "stopped → running" au fil du build.
+
+#### `apps.json` — registre de métadonnées
+Fichier JSON stockant les métadonnées des apps déployées (URL GitHub, chemin nginx, port). La source de vérité reste le compose global (includes) — `apps.json` enrichit uniquement l'affichage et permet la suppression propre du bloc nginx.
+
+#### Dockerfile — binaires requis
+```dockerfile
+RUN apk add --no-cache git docker-cli docker-cli-compose
+```
+- `git` : pour `git clone` et `git pull`
+- `docker-cli` : binaire Docker client
+- `docker-cli-compose` : plugin `docker compose` (v2)
+
+Le binaire nginx n'est **pas** monté depuis le host — incompatible Alpine/Ubuntu.
+
+#### `deployment/docker-compose.yml` — variables d'environnement
+```yaml
+environment:
+  BASE_URL: "http://<IP_VPS>"   # pour les health checks HTTP depuis le container
+```
+Sans `BASE_URL`, les checks se font sur `localhost:3000` (vps-monitor lui-même) au lieu de passer par nginx.
+
+#### Démarrage de vps-monitor
+Toujours utiliser le compose dédié, **pas** le compose global :
+```bash
+docker compose -f /var/www/vps-monitor/deployment/docker-compose.yml up -d
+```
+
+---
+
+## Guide — Ajouter une nouvelle application via le dashboard
+
+### Prérequis dans le repo de l'app
+
+Créer `deployment/docker-compose.yml` à la racine du repo :
+
+```yaml
+services:
+  nom-app:                          # doit correspondre au "Nom" saisi dans le dashboard
+    build: ..
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:PORT:PORT_INTERNE"
+```
+
+Le `Dockerfile` doit être à la racine du repo (référencé par `build: ..` depuis `deployment/`).
+
+Exemple pour une app Laravel sur le port 3088 :
+
+```yaml
+services:
+  cinemap-app:
+    build: ..
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3088:80"
+```
+
+> Si l'app est un bot Discord (pas de web) : omettre la section `ports` et laisser le champ "Chemin nginx" vide dans le dashboard.
+
+### Apps multi-services (ex : Vue + Express + MongoDB)
+
+Pour les apps avec plusieurs containers, utiliser `depends_on` pour que le démarrage du premier service entraîne le démarrage de tous les autres. Le premier service dans le fichier est celui que vps-monitor utilise (`getFirstServiceName`).
+
+Exemple — `B3dev-TP_VUE` (Vue frontend + Express API + MongoDB) :
+
+```yaml
+services:
+  tp-vue-front:               # ← premier = celui géré par vps-monitor
+    build:
+      context: ../my-project
+      dockerfile: deployment/Dockerfile
+    ports:
+      - "127.0.0.1:8080:80"
+    depends_on:
+      - tp-vue-api
+
+  tp-vue-api:
+    build:
+      context: ../express-project
+      dockerfile: deployment/Dockerfile
+    ports:
+      - "127.0.0.1:3003:3000"
+    environment:
+      MONGO_URI: mongodb://mongo:27017/madb
+    depends_on:
+      - mongo
+
+  mongo:
+    image: mongo:7
+    volumes:
+      - tp_vue_mongo:/data/db
+
+volumes:
+  tp_vue_mongo:
+```
+
+`docker compose up -d tp-vue-front` démarre automatiquement `tp-vue-api` puis `mongo` (chaîne de `depends_on`).
+
+### Proxy interne pour les apps multi-services
+
+vps-monitor ne crée qu'**un seul bloc nginx** par app (le port déclaré au dashboard). Pour les apps avec une API et/ou WebSocket sur un port différent, la solution est de faire proxy dans le **nginx du container frontend** plutôt que dans le nginx du VPS.
+
+Les containers d'un même `docker-compose.yml` partagent un réseau Docker — ils se joignent par hostname (ex : `tp-vue-api:3000`).
+
+Exemple — `my-project/deployment/nginx.conf` gérant API + Socket.io + SPA :
+
+```nginx
+server {
+    listen 80;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # Proxy API (le préfixe /chemin-app/ est déjà strip par le VPS nginx)
+    location /api/ {
+        proxy_pass http://tp-vue-api:3000/api/;
+    }
+
+    # Proxy Socket.io WebSocket
+    location /socket.io/ {
+        proxy_pass http://tp-vue-api:3000/B3dev-TP_VUE/socket.io/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
+```
+
+Le VPS nginx proxifie `/B3dev-TP_VUE/` → port 8080 (bloc unique géré par vps-monitor). Le container nginx prend en charge le routage interne vers les autres services.
+
+### Sur le dashboard — onglet Déploiement
+
+Remplir le formulaire "Déployer une nouvelle app" :
+
+| Champ | Exemple | Obligatoire |
+|---|---|---|
+| Nom | `cinemap-app` | ✅ (doit correspondre au nom du service dans le compose) |
+| URL | `https://github.com/RustyRory/mon-app.git` | ✅ |
+| Chemin nginx | `/cinemap-app/` | ❌ (vide si bot) |
+| Port | `3088` | ❌ (requis si chemin nginx) |
+
+Cliquer **Déployer** — vps-monitor va :
+1. `git clone` le repo dans `/var/www/<nom>/`
+2. Lire `<nom>/deployment/docker-compose.yml` pour récupérer le nom du service
+3. Ajouter l'include dans `/var/www/docker-compose.yml`
+4. `docker compose up -d <service>` (build inclus)
+5. Ajouter le bloc `location` dans `/etc/nginx/sites-available/vps` + reload
+
+### Vérification
+
+- Onglet **Monitoring** → le container apparaît en vert
+- Onglet **Configs** → nginx → la card `/cinemap-app/` est présente
+- `http://<IP>/cinemap-app/` répond
+
+### Mettre à jour une app
+
+Onglet **Déploiement** → bouton **Mettre à jour** sur la card de l'app.
+
+vps-monitor fait : `git pull` + `docker compose up -d --build <service>`.
+
+### Supprimer une app
+
+Onglet **Déploiement** → bouton **✕** sur la card de l'app (confirmation demandée).
+
+vps-monitor fait :
+1. `docker compose stop <service>` + `docker compose rm -f <service>`
+2. Retire l'include du compose global
+3. Supprime l'entrée dans `apps.json`
+4. Supprime `/var/www/<nom>/`
+5. Retire le bloc nginx + reload
+
+### CD automatique (GitHub Actions)
+
+Pour déclencher un redéploiement automatique à chaque push :
+
+```yaml
+- name: Trigger update via vps-monitor
+  run: |
+    curl -sf -c cookies.txt \
+      -X POST "${{ secrets.VPS_MONITOR_URL }}/auth/login" \
+      -H "Content-Type: application/json" \
+      -d '{"username":"${{ secrets.VPS_MONITOR_USER }}","password":"${{ secrets.VPS_MONITOR_PASS }}"}' \
+      | grep -q '"ok":true' || { echo "Login failed"; exit 1; }
+
+    curl -sf -b cookies.txt \
+      -X POST "${{ secrets.VPS_MONITOR_URL }}/api/deploy/update" \
+      -H "Content-Type: application/json" \
+      -d '{"name":"<nom-app>"}' \
+      | grep -q '"ok":true' || { echo "Update failed"; exit 1; }
+```
+
+Secrets GitHub requis : `VPS_MONITOR_URL`, `VPS_MONITOR_USER`, `VPS_MONITOR_PASS`.
+
+---
+
+## Phase 6 — Infrastructure partagée & améliorations déploiement
+
+### Mongo partagé via compose infra
+
+Les apps multi-services qui utilisaient leur propre service `mongo` dans leur compose posent un problème : à la suppression de l'app, mongo est stoppé. Et plusieurs apps ne peuvent pas partager la même base si chacune embarque la sienne.
+
+**Solution** : un compose `infra` géré par vps-monitor, toujours inclus en tête du main compose.
+
+Au démarrage de vps-monitor, `ensureInfraInclude()` :
+1. Crée `/var/www/infra/docker-compose.yml` si absent (avec le service `mongo:7`)
+2. Injecte `infra/docker-compose.yml` en première entrée du main compose
+3. Lance `composeUp('mongo')`
+
+Le service `infra` est filtré de la liste des apps supprimables dans le dashboard.
+
+Les apps qui ont besoin de mongo suppriment leur service `mongo` du compose et utilisent simplement :
+```yaml
+environment:
+  MONGO_URI: mongodb://mongo:27017/madb
+```
+Les containers partagent le réseau Docker via les `include:` du main compose — ils se joignent par hostname.
+
+### deleteApp — arrêt de tous les services
+
+Avant : `deleteApp` ne stoppait que le premier service de l'app (celui retourné par `getFirstServiceName`). Les services secondaires (API, etc.) restaient en vie en tant qu'orphelins.
+
+**Fix** : ajout de `getAllServiceNames(name)` dans `compose.js` — parse le bloc `services:` du compose de l'app et retourne tous les noms. `deleteApp` appelle `composeDown` sur chacun en parallèle avant de supprimer les fichiers.
+
+### Suppression de containers depuis le dashboard
+
+Nouveau bouton **Supprimer** sur les cards container dans l'onglet Monitoring. Visible uniquement quand le container est arrêté (Stop → Supprimer). Utilise `container.remove({ force: false })` via dockerode.
+
+API : `POST /api/container/remove` avec `{ name }`.
+
+### Nginx — option `stripPrefix`
+
+**Problème** : le template `addApp()` générait toujours `proxy_pass http://127.0.0.1:${port}/;` avec un trailing slash qui supprime le préfixe de l'URL avant de transmettre au container. Correct pour les apps statiques (Vue SPA, nginx interne), mais cassant pour les apps **Next.js avec `basePath`** — Next.js reçoit `/` au lieu de `/Lucky7/` et retourne 404.
+
+**Fix** : `addApp(path, port, stripPrefix = true)` — si `stripPrefix = false`, génère `proxy_pass http://127.0.0.1:${port}` sans trailing slash, le préfixe est conservé.
+
+**Dashboard** : case à cocher **"Conserver le préfixe"** dans le formulaire nginx et dans le formulaire de clone. Coché = `stripPrefix: false`.
+
+Règle : cocher pour les apps **Next.js avec `basePath`**. Ne pas cocher pour les apps Vue/statiques avec un nginx interne qui attend le path strippé.
+
+### Lucky7 — configuration déploiement
+
+App Next.js (frontend) + Express+Socket.io (backend) + mongo partagé.
+
+**Architecture** :
+- `lucky7-front` : port `8081`, nginx block `/Lucky7/` avec **"Conserver le préfixe" coché** (Next.js basePath = `/Lucky7`)
+- `lucky7-back` : port `4001`, nginx block `/Lucky7-api/` avec strip (Socket.io avec path par défaut `/socket.io/`)
+
+**Fichiers créés/modifiés** :
+- `deployment/docker-compose.yml` : two services, mongo partagé
+- `lucky7-app/frontend/Dockerfile` : `NEXT_PUBLIC_BACKEND_URL` comme build ARG
+- `lucky7-app/frontend/src/lib/socket.ts` : parse `NEXT_PUBLIC_BACKEND_URL` pour extraire origin + construire le socket.io path (`url.pathname + '/socket.io'`)
+- `.github/workflows/deploy-staging.yml` : SSH → vps-monitor API
+
+**Pourquoi parser l'URL dans socket.ts** : `io('http://host/path')` interprète `/path` comme un namespace Socket.io, pas comme un path de connexion. Il faut `io(origin, { path: '/path/socket.io' })` pour que le WebSocket passe par le bon bloc nginx.
+
+### Fix B3dev-TP_VUE
+
+Deux bugs corrigés :
+
+1. **Double `/api`** : `VITE_BACKEND_URL` valait `http://78.138.58.95/B3dev-TP_VUE/api` alors que le code Vue ajoutait `/api/...` → `http://.../api/api/auth/...` → 404. Corrigé : `VITE_BACKEND_URL: http://78.138.58.95/B3dev-TP_VUE`.
+
+2. **WebSocket bloqué** : le template nginx de `addApp()` ne transmettait pas les headers `Upgrade` et `Connection`. Corrigé : ajout systématique de ces deux headers dans le bloc généré.
+
+---
+
+## Phase 7 — Évolutions futures
+
+- Alertes email / Discord quand un service tombe
+- Historique d'uptime (stockage fichier ou SQLite)
+- Graphiques CPU / RAM via `dockerode.stats`
+- Support multi-serveurs
+- `git config --global --add safe.directory '*'` dans le Dockerfile vps-monitor (les repos clonés par le container root ne sont pas accessibles en `git` par l'utilisateur host)
 
 ---

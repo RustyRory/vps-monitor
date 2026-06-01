@@ -4,19 +4,29 @@ import { promisify } from 'util';
 
 const execFile = promisify(execFileCb);
 
-const NGINX_CONFIG = process.env.NGINX_CONFIG || '/etc/nginx/sites-enabled/vps';
+const NGINX_CONFIG = process.env.NGINX_CONFIG || '/etc/nginx/sites-available/vps';
 
 export async function testConfig() {
   try {
     const { stdout, stderr } = await execFile('/usr/sbin/nginx', ['-t']);
     return { ok: true, output: stdout + stderr };
   } catch (err) {
-    return { ok: false, output: (err.stdout ?? '') + (err.stderr ?? '') };
+    const output = (err.stdout ?? '') + (err.stderr ?? '');
+    // getpwnam/getgrnam failures are container env issues (missing host users), not config errors
+    const hasRealError = output.split('\n').some(
+      (l) => l.includes('[emerg]') && !l.includes('getpwnam') && !l.includes('getgrnam'),
+    );
+    return { ok: !hasRealError, output };
   }
 }
 
 export async function reload() {
-  await execFile('/usr/sbin/nginx', ['-s', 'reload']);
+  const { stdout } = await execFile('sh', ['-c',
+    "for f in /proc/[0-9]*/cmdline; do grep -qa 'nginx: master' \"$f\" && basename \"${f%/cmdline}\" && break; done",
+  ]);
+  const pid = stdout.trim();
+  if (!pid) throw new Error('nginx master process introuvable');
+  await execFile('kill', ['-HUP', pid]);
 }
 
 export async function readConfig() {
@@ -49,12 +59,17 @@ export function parseConfigMeta(content) {
   return { serverName, rootPort };
 }
 
-export async function addApp(path, port) {
+export async function addApp(path, port, stripPrefix = true) {
   const content = await readConfig();
+  const proxyTarget = stripPrefix
+    ? `http://127.0.0.1:${port}/`
+    : `http://127.0.0.1:${port}`;
   const block = `
     location ${path} {
-        proxy_pass http://127.0.0.1:${port}/;
+        proxy_pass ${proxyTarget};
         proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
     }`;

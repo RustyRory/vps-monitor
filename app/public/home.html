@@ -13,32 +13,7 @@
     <p>· VPS 78.138.58.95 ·</p>
   </header>
 
-  <div class="grid">
-    <a class="card" href="/qw-app/">
-      <span class="label">QW APP</span>
-      <span class="url">/qw-app/</span>
-    </a>
-    <a class="card" href="/collegelaboussole/">
-      <span class="label">College La Boussole</span>
-      <span class="url">/collegelaboussole/</span>
-    </a>
-    <a class="card" href="/saintbarthvolley/">
-      <span class="label">SaintBarth Volley</span>
-      <span class="url">/saintbarthvolley/</span>
-    </a>
-    <a class="card" href="/lucky7/">
-      <span class="label">Lucky7</span>
-      <span class="url">/lucky7/</span>
-    </a>
-    <a class="card" href="/cinemap/">
-      <span class="label">CineMap — TP Laravel</span>
-      <span class="url">/cinemap/</span>
-    </a>
-    <a class="card" href="/B3dev-TP_VUE/">
-      <span class="label">TP VUE</span>
-      <span class="url">/B3dev-TP_VUE/</span>
-    </a>
-  </div>
+  <div id="grid" class="grid"></div>
 
   <footer>
     <a class="monitoring-link" href="/login.html">Monitoring</a>
@@ -49,6 +24,22 @@
       · 2026
     </span>
   </footer>
+
+  <script>
+    fetch('/api/apps')
+      .then((r) => r.json())
+      .then((apps) => {
+        const grid = document.getElementById('grid');
+        if (!apps.length) { grid.innerHTML = '<p style="color:#475569">Aucune application déployée.</p>'; return; }
+        grid.innerHTML = apps.map(({ path }) => `
+          <a class="card" href="${path}">
+            <span class="label">${path.replace(/\//g, '')}</span>
+            <span class="url">${path}</span>
+          </a>
+        `).join('');
+      })
+      .catch(() => {});
+  </script>
 
 </body>
 </html>

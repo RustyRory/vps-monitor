@@ -12,13 +12,13 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - /var/www:/var/www
       - /etc/nginx:/etc/nginx:ro
+      - /etc/nginx/sites-available:/etc/nginx/sites-available
       - /etc/nginx/sites-enabled:/etc/nginx/sites-enabled
-      - /usr/sbin/nginx:/usr/sbin/nginx:ro
-      - /run:/run:ro
     env_file:
       - path: ../.env
         required: false
     environment:
       PORT: "3000"
-      NGINX_CONFIG: /etc/nginx/sites-enabled/vps
+      BASE_URL: "http://78.138.58.95"
+      NGINX_CONFIG: /etc/nginx/sites-available/vps
       VPSCONFIG_PATH: /var/www/vps-monitor

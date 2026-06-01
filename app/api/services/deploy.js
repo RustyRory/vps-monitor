@@ -1,76 +1,230 @@
-import { readFile, access } from 'fs/promises';
-import { join } from 'path';
-import { execFile as execFileCb } from 'child_process';
+import { readFile, writeFile, access, rm } from 'fs/promises';
+import { join, dirname } from 'path';
+import { execFile as execFileCb, spawn } from 'child_process';
 import { promisify } from 'util';
+import {
+  addInclude, removeInclude, getAllServiceNames, findComposePath,
+  composeDown, composeIsRunning, composeRebuildStreaming,
+} from './compose.js';
+import {
+  getProjects, getProject, addProject, deleteProject,
+  setProjectStatus, addDeployment, updateDeployment, generateDeployId,
+} from './registry.js';
+import { startBuildSession } from './build.js';
 
 const execFile = promisify(execFileCb);
 
-const REPO_ROOT = process.env.VPSCONFIG_PATH || '/var/www/vps-monitor';
-const APPS_ROOT = '/var/www';
+const APPS_ROOT = process.env.APPS_ROOT || '/var/www';
 
-async function readRegistry() {
-  const raw = await readFile(join(REPO_ROOT, 'apps.json'), 'utf8');
-  return JSON.parse(raw);
+function safeName(id) {
+  if (!/^[a-zA-Z0-9_-]+$/.test(id)) throw new Error('Identifiant invalide');
+  return id;
 }
 
-function safeName(name) {
-  if (!/^[a-zA-Z0-9_-]+$/.test(name)) throw new Error('Nom d\'app invalide');
-  return name;
+async function envFilePath(name) {
+  const relPath = await findComposePath(name);
+  return join(APPS_ROOT, dirname(relPath), '.env');
 }
 
-async function getComposeCwd(appPath) {
-  const deploymentPath = join(appPath, 'deployment');
+async function envExamplePath(name) {
+  const relPath = await findComposePath(name);
+  return join(APPS_ROOT, dirname(relPath), '.env.example');
+}
+
+export async function readEnvFile(name) {
+  safeName(name);
+  try { return await readFile(await envFilePath(name), 'utf8'); } catch { return ''; }
+}
+
+export async function writeEnvFile(name, content) {
+  safeName(name);
+  await writeFile(await envFilePath(name), content, 'utf8');
+}
+
+export async function readEnvExample(name) {
+  safeName(name);
+  try { return await readFile(await envExamplePath(name), 'utf8'); } catch { return ''; }
+}
+
+async function getCurrentCommit(appPath) {
   try {
-    await access(join(deploymentPath, 'docker-compose.yml'));
-    return deploymentPath;
+    const { stdout } = await execFile('git', ['-C', appPath, 'rev-parse', '--short', 'HEAD']);
+    return stdout.trim();
   } catch {
-    return appPath;
+    return null;
   }
 }
 
-async function compose(appPath, ...args) {
-  const cwd = await getComposeCwd(appPath);
-  return execFile('docker', ['compose', ...args], { cwd });
+async function httpHealthcheck(url, timeoutMs = 30000, intervalMs = 2000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 3000);
+      const res = await fetch(url, { signal: controller.signal });
+      clearTimeout(timer);
+      if (res.status < 500) return true;
+    } catch { /* retry */ }
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+  return false;
 }
 
-export async function getAppStatus(name) {
-  safeName(name);
-  const appPath = join(APPS_ROOT, name);
+export async function createDeploymentRecord(projectId, options = {}) {
+  safeName(projectId);
+  await getProject(projectId);
+
+  const deployId = generateDeployId();
+  const deployment = {
+    id: deployId,
+    timestamp: new Date().toISOString(),
+    commit: null,
+    status: 'pending',
+    logFile: `${projectId}-${deployId}.log`,
+    duration: null,
+    triggeredBy: options.triggeredBy || 'manual',
+  };
+
+  await addDeployment(projectId, deployment);
+  await setProjectStatus(projectId, 'building');
+  return deployId;
+}
+
+export async function runDeployment(projectId, deployId, options = {}) {
+  const { env = null, branch = null } = options;
+  safeName(projectId);
+
+  const project = await getProject(projectId);
+  const appPath = join(APPS_ROOT, projectId);
+
+  const buildSession = await startBuildSession(projectId, deployId);
+  const startTime = Date.now();
+
+  const log = (text) => buildSession.write(text);
 
   try {
+    // --- Git clone or update ---
+    let isNewClone = false;
+    try {
+      await access(appPath);
+    } catch {
+      isNewClone = true;
+    }
+
+    if (isNewClone) {
+      log(`[vps] Clonage de ${project.gitUrl}...\n`);
+      const cloneArgs = ['clone'];
+      const targetBranch = branch || project.branch;
+      if (targetBranch) cloneArgs.push('-b', targetBranch);
+      cloneArgs.push(project.gitUrl, appPath);
+
+      await new Promise((resolve, reject) => {
+        const child = spawn('git', cloneArgs);
+        child.stdout.on('data', (chunk) => log(chunk.toString('utf8')));
+        child.stderr.on('data', (chunk) => log(chunk.toString('utf8')));
+        child.on('close', (code) => code === 0 ? resolve() : reject(new Error(`git clone exited ${code}`)));
+        child.on('error', reject);
+      });
+
+      await addInclude(projectId);
+    } else {
+      log(`[vps] Mise à jour depuis ${project.gitUrl}...\n`);
+      const safeDir = [`-c`, `safe.directory=${appPath}`];
+      await new Promise((resolve, reject) => {
+        const child = spawn('git', ['-C', appPath, ...safeDir, 'fetch', 'origin']);
+        child.stdout.on('data', (chunk) => log(chunk.toString('utf8')));
+        child.stderr.on('data', (chunk) => log(chunk.toString('utf8')));
+        child.on('close', (code) => code === 0 ? resolve() : reject(new Error(`git fetch exited ${code}`)));
+        child.on('error', reject);
+      });
+
+      const { stdout: branchOut } = await execFile('git', ['-C', appPath, ...safeDir, 'rev-parse', '--abbrev-ref', 'HEAD']);
+      const currentBranch = (branch || project.branch || branchOut.trim());
+
+      await new Promise((resolve, reject) => {
+        const child = spawn('git', ['-C', appPath, ...safeDir, 'reset', '--hard', `origin/${currentBranch}`]);
+        child.stdout.on('data', (chunk) => log(chunk.toString('utf8')));
+        child.stderr.on('data', (chunk) => log(chunk.toString('utf8')));
+        child.on('close', (code) => code === 0 ? resolve() : reject(new Error(`git reset exited ${code}`)));
+        child.on('error', reject);
+      });
+    }
+
+    // --- Write .env if provided ---
+    if (env !== null) {
+      log(`[vps] Écriture du fichier .env...\n`);
+      await writeEnvFile(projectId, env);
+    }
+
+    // --- Get commit hash ---
+    const commit = await getCurrentCommit(appPath);
+    await updateDeployment(projectId, deployId, { commit, status: 'building' });
+
+    // --- Build & start containers ---
+    log(`[vps] Démarrage du build...\n`);
+    const services = await getAllServiceNames(projectId).catch(() => [projectId]);
+
+    await composeRebuildStreaming(services, isNewClone, log);
+
+    // --- Healthcheck ---
+    log(`[vps] Healthcheck...\n`);
+    let healthy = true;
+    if (project.nginxPath && project.port) {
+      const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
+      const healthUrl = `${BASE_URL}${project.nginxPath}`;
+      healthy = await httpHealthcheck(healthUrl);
+      log(healthy ? `[vps] Application opérationnelle.\n` : `[vps] Healthcheck timeout — l'app ne répond pas.\n`);
+    }
+
+    const duration = Math.round((Date.now() - startTime) / 1000);
+    const finalStatus = healthy ? 'success' : 'failed';
+
+    await updateDeployment(projectId, deployId, { status: finalStatus, duration });
+    await setProjectStatus(projectId, healthy ? 'running' : 'failed');
+
+    log(`[vps] Déploiement ${finalStatus} (${duration}s)\n`);
+  } catch (err) {
+    const duration = Math.round((Date.now() - startTime) / 1000);
+    log(`[vps] ERREUR: ${err.message}\n`);
+    await updateDeployment(projectId, deployId, { status: 'failed', duration });
+    await setProjectStatus(projectId, 'failed');
+  } finally {
+    buildSession.end();
+  }
+}
+
+export async function deleteProjectFiles(projectId) {
+  safeName(projectId);
+  const appPath = join(APPS_ROOT, projectId);
+
+  const services = await getAllServiceNames(projectId).catch(() => [projectId]);
+  await Promise.all(services.map((s) => composeDown(s)));
+  await removeInclude(projectId);
+  await rm(appPath, { recursive: true, force: true });
+}
+
+// --- Sync running status for a project from Docker ---
+export async function syncProjectStatus(projectId) {
+  try {
+    const appPath = join(APPS_ROOT, projectId);
     await access(appPath);
+    const services = await getAllServiceNames(projectId).catch(() => [projectId]);
+    const checks = await Promise.all(services.map((s) => composeIsRunning(s)));
+    const running = checks.some(Boolean);
+    await setProjectStatus(projectId, running ? 'running' : 'stopped');
+    return running ? 'running' : 'stopped';
   } catch {
-    return { name, deployed: false, running: false };
-  }
-
-  try {
-    const { stdout } = await compose(appPath, 'ps', '--quiet');
-    return { name, deployed: true, running: stdout.trim().length > 0 };
-  } catch {
-    return { name, deployed: true, running: false };
-  }
-}
-
-export async function listApps() {
-  try {
-    const registry = await readRegistry();
-    return Promise.all(registry.map(({ name }) => getAppStatus(name)));
-  } catch {
-    return [];
+    await setProjectStatus(projectId, 'unknown');
+    return 'unknown';
   }
 }
 
-export async function cloneApp(name, url) {
-  safeName(name);
-  if (!/^https?:\/\//.test(url)) throw new Error('URL invalide');
-  const appPath = join(APPS_ROOT, name);
-  await execFile('git', ['clone', url, appPath]);
-  await compose(appPath, 'up', '-d');
+// Convenience wrapper: create record + fire async run
+export async function deployProject(projectId, options = {}) {
+  const deployId = await createDeploymentRecord(projectId, options);
+  runDeployment(projectId, deployId, options)
+    .catch((err) => console.error(`[deploy] ${projectId}:`, err.message));
+  return deployId;
 }
 
-export async function updateApp(name) {
-  safeName(name);
-  const appPath = join(APPS_ROOT, name);
-  await execFile('git', ['-C', appPath, 'pull']);
-  await compose(appPath, 'up', '-d', '--build');
-}
+export { getProjects, getProject, addProject, deleteProject };

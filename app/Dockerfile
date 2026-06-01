@@ -1,5 +1,8 @@
 FROM node:20-alpine
 
+RUN apk add --no-cache git docker-cli docker-cli-compose \
+    && git config --global --add safe.directory '*'
+
 WORKDIR /app
 
 COPY package*.json ./
