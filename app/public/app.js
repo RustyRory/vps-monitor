@@ -296,8 +296,16 @@ async function fullRestartApp(name, btn) {
   btn.disabled = true;
   btn.textContent = '…';
   const res = await fetch(`/api/deploy/apps/${encodeURIComponent(name)}/full-restart`, { method: 'POST' });
-  btn.textContent = res.ok ? '✅' : '❌';
-  setTimeout(() => { btn.disabled = false; btn.textContent = 'Redémarrage complet'; loadDeploy(); }, 3000);
+  const data = await res.json().catch(() => ({}));
+  if (res.ok) {
+    const info = data.connections ? `\n${data.connections.join('\n')}` : '';
+    alert(`✅ Redémarrage complet de "${name}" terminé.\nRéseau : ${data.network || '?'}${info}`);
+  } else {
+    alert(`❌ Erreur : ${data.error || 'inconnue'}`);
+  }
+  btn.disabled = false;
+  btn.textContent = 'Redémarrage complet';
+  loadDeploy();
 }
 
 function toggleEnvSection() {

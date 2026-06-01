@@ -116,27 +116,37 @@ export async function composeRebuild(serviceNames, forceBuild = false) {
 
 export async function composeFullRestart(appName) {
   const allServices = await getAllServiceNames(appName);
-  console.log(`[full-restart] ${appName}: services détectés = [${allServices.join(', ')}]`);
+  console.log(`[full-restart] ${appName}: services = [${allServices.join(', ')}]`);
 
-  // Suppression de tous les containers de l'app (y compris bases de données)
+  // Suppression de tous les containers
   await execFile('docker', ['compose', '-f', MAIN_COMPOSE, 'rm', '-sf', ...allServices], { cwd: APPS_ROOT }).catch(() => {});
   await Promise.all(allServices.map((n) => execFile('docker', ['rm', '-f', n]).catch(() => {})));
 
-  // Suppression des réseaux orphelins liés à l'app
+  // Suppression puis recréation d'un réseau dédié propre
   const networkName = `${appName}-net`;
-  await execFile('docker', ['network', 'rm', networkName, `${appName}_net`], {}).catch(() => {});
-
-  // Création d'un réseau dédié pour l'app
-  await execFile('docker', ['network', 'create', networkName], {}).catch(() => {});
+  await execFile('docker', ['network', 'rm', networkName], {}).catch(() => {});
+  await execFile('docker', ['network', 'create', networkName], {});
 
   // Démarrage de tous les containers
   await execFile('docker', ['compose', '-f', MAIN_COMPOSE, 'up', '-d', ...allServices], { cwd: APPS_ROOT });
 
-  // Connexion explicite de tous les containers au réseau partagé (quel que soit leur réseau actuel)
-  await Promise.all(
-    allServices.map((n) => execFile('docker', ['network', 'connect', networkName, n]).catch(() => {}))
+  // Attente que les containers soient créés (3s)
+  await new Promise((r) => setTimeout(r, 3000));
+
+  // Connexion forcée de TOUS les containers au réseau partagé
+  const connectResults = await Promise.all(
+    allServices.map(async (n) => {
+      try {
+        await execFile('docker', ['network', 'connect', networkName, n]);
+        return `${n}: connecté`;
+      } catch (e) {
+        return `${n}: ${e.message.includes('already') ? 'déjà connecté' : e.message.split('\n')[0]}`;
+      }
+    })
   );
-  console.log(`[full-restart] ${appName}: tous les containers connectés à ${networkName}`);
+
+  console.log(`[full-restart] réseau ${networkName}:`, connectResults);
+  return { services: allServices, network: networkName, connections: connectResults };
 }
 
 const INFRA_COMPOSE_CONTENT = `services:

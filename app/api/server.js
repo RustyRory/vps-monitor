@@ -301,8 +301,8 @@ app.get('/api/diagnostics/networks', requireAuth, async (req, res) => {
 app.post('/api/deploy/apps/:name/full-restart', requireAuth, async (req, res) => {
   const { name } = req.params;
   try {
-    res.json({ ok: true, restarting: true });
-    composeFullRestart(name).catch((err) => console.error(`[full-restart] ${name} failed:`, err.message));
+    const result = await composeFullRestart(name);
+    res.json({ ok: true, ...result });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
