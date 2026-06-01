@@ -8,7 +8,7 @@ const execFile = promisify(execFileCb);
 const APPS_ROOT = process.env.APPS_ROOT || '/var/www';
 const MAIN_COMPOSE = join(APPS_ROOT, 'docker-compose.yml');
 
-async function findComposePath(name) {
+export async function findComposePath(name) {
   const deployPath = join(APPS_ROOT, name, 'deployment', 'docker-compose.yml');
   try {
     await access(deployPath);

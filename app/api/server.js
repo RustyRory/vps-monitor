@@ -9,7 +9,7 @@ import { readFile, writeFile } from 'fs/promises';
 import { getContainers, restartContainer, stopContainer, startContainer, removeContainer, streamContainerLogs } from './services/docker.js';
 import { checkWebsites } from './services/http.js';
 import { reload as reloadNginx, readConfig, writeConfig, parseApps, parseConfigMeta, addApp, removeApp } from './services/nginx.js';
-import { listApps, cloneApp, updateApp, deleteApp, getAppStatus } from './services/deploy.js';
+import { listApps, cloneApp, updateApp, deleteApp, getAppStatus, writeEnvFile, readEnvFile, readEnvExample } from './services/deploy.js';
 import { composeUp, composeRebuild, getAllServiceNames, ensureInfraInclude } from './services/compose.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -231,7 +231,7 @@ app.get('/api/deploy/status/:app', requireAuth, async (req, res) => {
 });
 
 app.post('/api/deploy/clone', requireAuth, async (req, res) => {
-  const { name, url, nginxPath, port, stripPrefix = true, branch } = req.body;
+  const { name, url, nginxPath, port, stripPrefix = true, branch, env } = req.body;
   if (!name || !url) return res.status(400).json({ error: 'name et url requis' });
   if (nginxPath && !port) return res.status(400).json({ error: 'port requis si nginxPath fourni' });
   try {
@@ -241,12 +241,40 @@ app.post('/api/deploy/clone', requireAuth, async (req, res) => {
       await addApp(nginxPath, parsedPort, stripPrefix);
       await reloadNginx();
     }
+    if (env) await writeEnvFile(name, env);
     const allServices = await getAllServiceNames(name).catch(() => [service]);
     res.json({ ok: true, building: true });
     composeRebuild(allServices).catch((err) => console.error(`[clone] build ${name} failed:`, err.message));
   } catch (err) {
     const status = ['Nom d\'app invalide', 'URL invalide'].includes(err.message) ? 400 : 500;
     res.status(status).json({ error: err.message });
+  }
+});
+
+app.get('/api/deploy/apps/:name/env', requireAuth, async (req, res) => {
+  try {
+    res.json({ content: await readEnvFile(req.params.name) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/deploy/apps/:name/env-example', requireAuth, async (req, res) => {
+  try {
+    res.json({ content: await readEnvExample(req.params.name) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/deploy/apps/:name/env', requireAuth, async (req, res) => {
+  const { content } = req.body;
+  if (content === undefined) return res.status(400).json({ error: 'content requis' });
+  try {
+    await writeEnvFile(req.params.name, content);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(err.message === 'Nom d\'app invalide' ? 400 : 500).json({ error: err.message });
   }
 });
 

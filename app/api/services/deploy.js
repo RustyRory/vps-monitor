@@ -1,8 +1,8 @@
 import { readFile, writeFile, access } from 'fs/promises';
-import { join } from 'path';
+import { join, dirname } from 'path';
 import { execFile as execFileCb } from 'child_process';
 import { promisify } from 'util';
-import { addInclude, removeInclude, listIncludes, getFirstServiceName, getAllServiceNames, composeDown, composeIsRunning } from './compose.js';
+import { addInclude, removeInclude, listIncludes, getFirstServiceName, getAllServiceNames, composeDown, composeIsRunning, findComposePath } from './compose.js';
 import { rm } from 'fs/promises';
 
 const execFile = promisify(execFileCb);
@@ -22,6 +22,32 @@ async function writeRegistry(apps) {
 function safeName(name) {
   if (!/^[a-zA-Z0-9_-]+$/.test(name)) throw new Error('Nom d\'app invalide');
   return name;
+}
+
+async function envFilePath(name) {
+  const relPath = await findComposePath(name);
+  return join(APPS_ROOT, dirname(relPath), '.env');
+}
+
+async function envExamplePath(name) {
+  const relPath = await findComposePath(name);
+  return join(APPS_ROOT, dirname(relPath), '.env.example');
+}
+
+export async function writeEnvFile(name, content) {
+  safeName(name);
+  const p = await envFilePath(name);
+  await writeFile(p, content, 'utf8');
+}
+
+export async function readEnvFile(name) {
+  safeName(name);
+  try { return await readFile(await envFilePath(name), 'utf8'); } catch { return ''; }
+}
+
+export async function readEnvExample(name) {
+  safeName(name);
+  try { return await readFile(await envExamplePath(name), 'utf8'); } catch { return ''; }
 }
 
 export async function getAppStatus(name) {

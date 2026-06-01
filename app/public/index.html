@@ -87,6 +87,19 @@
             </label>
           </div>
           <div class="clone-inputs">
+            <label style="font-size:.85rem;display:flex;align-items:center;gap:.4rem;cursor:pointer">
+              <input id="clone-has-env" type="checkbox" onchange="toggleEnvSection()" />
+              Définir le <code>.env</code> avant le build
+            </label>
+          </div>
+          <div id="clone-env-section" class="clone-env-section hidden">
+            <div class="clone-env-header">
+              <span>Variables d'environnement</span>
+              <button class="env-example-btn" onclick="loadCloneEnvExample()">Charger .env.example</button>
+            </div>
+            <textarea id="clone-env-content" class="env-editor" spellcheck="false" placeholder="# Colle ici le contenu de ton .env&#10;DATABASE_URL=..."></textarea>
+          </div>
+          <div class="clone-inputs">
             <button onclick="cloneNewApp()">Déployer</button>
           </div>
           <div id="clone-status" class="clone-status"></div>
@@ -105,6 +118,26 @@
         </div>
       </div>
       <pre id="logs-content" class="logs-content"></pre>
+    </div>
+  </div>
+
+  <div id="env-modal" class="modal-overlay hidden" onclick="if(event.target===this)closeEnvModal()">
+    <div class="modal">
+      <div class="modal-header">
+        <span id="env-modal-title">Variables d'environnement</span>
+        <div class="modal-actions">
+          <button class="modal-copy env-example-btn" onclick="loadEnvExample()">Charger .env.example</button>
+          <button class="modal-close" onclick="closeEnvModal()">✕</button>
+        </div>
+      </div>
+      <textarea id="env-modal-content" class="env-editor env-editor--modal" spellcheck="false"></textarea>
+      <div class="modal-footer">
+        <span id="env-modal-status" class="clone-status"></span>
+        <div style="display:flex;gap:.5rem">
+          <button onclick="saveEnv(false)">Sauvegarder</button>
+          <button onclick="saveEnv(true)">Sauvegarder et reconstruire</button>
+        </div>
+      </div>
     </div>
   </div>
 

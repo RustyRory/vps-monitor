@@ -250,7 +250,8 @@ function renderDeployApps(apps) {
       </div>
       <div class="card-actions">
         ${a.deployed
-          ? `<button onclick="updateDeployApp('${a.name}', this)">Mettre à jour</button>`
+          ? `<button onclick="updateDeployApp('${a.name}', this)">Mettre à jour</button>
+             <button onclick="openEnvModal('${a.name}')">Éditer .env</button>`
           : `<button onclick="promptClone('${a.name}')">Déployer</button>`
         }
       </div>
@@ -289,6 +290,20 @@ async function updateDeployApp(name, btn) {
   setTimeout(() => loadDeploy(), 1500);
 }
 
+function toggleEnvSection() {
+  const show = document.getElementById('clone-has-env').checked;
+  document.getElementById('clone-env-section').classList.toggle('hidden', !show);
+}
+
+async function loadCloneEnvExample() {
+  const name = document.getElementById('clone-name').value.trim();
+  if (!name) { alert('Renseigne le nom de l\'app d\'abord'); return; }
+  const res = await fetch(`/api/deploy/apps/${encodeURIComponent(name)}/env-example`);
+  if (!res.ok) return;
+  const { content } = await res.json();
+  if (content) document.getElementById('clone-env-content').value = content;
+}
+
 function promptClone(name) {
   document.getElementById('clone-name').value = name;
   document.getElementById('clone-url').focus();
@@ -307,11 +322,14 @@ async function cloneNewApp() {
   if (!name || !url) { statusEl.textContent = '❌ Nom et URL requis'; return; }
   if (nginxPath && !port) { statusEl.textContent = '❌ Port requis si chemin nginx renseigné'; return; }
 
+  const hasEnv = document.getElementById('clone-has-env').checked;
+  const env = hasEnv ? document.getElementById('clone-env-content').value.trim() : null;
+
   statusEl.textContent = `Déploiement de ${name}…`;
   const res = await fetch('/api/deploy/clone', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, url, branch, nginxPath, port: port ? parseInt(port, 10) : undefined, stripPrefix }),
+    body: JSON.stringify({ name, url, branch, nginxPath, port: port ? parseInt(port, 10) : undefined, stripPrefix, env }),
   });
   const data = await res.json();
   statusEl.textContent = res.ok ? `✅ ${name} déployé` : `❌ ${data.error}`;
@@ -321,6 +339,9 @@ async function cloneNewApp() {
     document.getElementById('clone-branch').value = '';
     document.getElementById('clone-nginx-path').value = '';
     document.getElementById('clone-nginx-port').value = '';
+    document.getElementById('clone-has-env').checked = false;
+    document.getElementById('clone-env-content').value = '';
+    document.getElementById('clone-env-section').classList.add('hidden');
     loadDeploy();
   }
 }
@@ -389,6 +410,62 @@ function renderSummary(containers, websites) {
   const ko = all.length - ok;
   const el = document.getElementById('summary');
   el.innerHTML = `<span class="ok-count">${ok} OK</span> / <span class="ko-count">${ko} KO</span>`;
+}
+
+// --- Env modal ---
+
+let envModalApp = null;
+
+async function openEnvModal(name) {
+  envModalApp = name;
+  document.getElementById('env-modal-title').textContent = `.env — ${name}`;
+  document.getElementById('env-modal-status').textContent = '';
+  document.getElementById('env-modal-content').value = 'Chargement…';
+  document.getElementById('env-modal').classList.remove('hidden');
+  const res = await fetch(`/api/deploy/apps/${encodeURIComponent(name)}/env`);
+  const { content } = await res.json();
+  document.getElementById('env-modal-content').value = content || '';
+}
+
+async function loadEnvExample() {
+  if (!envModalApp) return;
+  const res = await fetch(`/api/deploy/apps/${encodeURIComponent(envModalApp)}/env-example`);
+  if (!res.ok) return;
+  const { content } = await res.json();
+  if (content) document.getElementById('env-modal-content').value = content;
+}
+
+async function saveEnv(rebuild) {
+  const content = document.getElementById('env-modal-content').value;
+  const statusEl = document.getElementById('env-modal-status');
+  statusEl.textContent = 'Sauvegarde…';
+  const res = await fetch(`/api/deploy/apps/${encodeURIComponent(envModalApp)}/env`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content }),
+  });
+  if (!res.ok) {
+    const data = await res.json();
+    statusEl.textContent = `❌ ${data.error}`;
+    return;
+  }
+  if (rebuild) {
+    statusEl.textContent = 'Reconstruction…';
+    await fetch('/api/deploy/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: envModalApp }),
+    });
+    statusEl.textContent = '✅ Sauvegardé — build en cours';
+    setTimeout(() => closeEnvModal(), 1500);
+  } else {
+    statusEl.textContent = '✅ Sauvegardé';
+  }
+}
+
+function closeEnvModal() {
+  document.getElementById('env-modal').classList.add('hidden');
+  envModalApp = null;
 }
 
 async function refresh() {
