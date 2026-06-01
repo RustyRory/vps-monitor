@@ -7,7 +7,7 @@ import {
   composeDown, composeIsRunning, composeRebuildStreaming,
 } from './compose.js';
 import {
-  getProjects, getProject, addProject, deleteProject,
+  getProjects, getProject, addProject, updateProject, deleteProject,
   setProjectStatus, addDeployment, updateDeployment, generateDeployId,
 } from './registry.js';
 import { startBuildSession } from './build.js';
@@ -227,4 +227,4 @@ export async function deployProject(projectId, options = {}) {
   return deployId;
 }
 
-export { getProjects, getProject, addProject, deleteProject };
+export { getProjects, getProject, addProject, updateProject, deleteProject };
