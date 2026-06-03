@@ -40,6 +40,7 @@ export function renderProject(el, project, tab, navigate) {
         <span class="dot ${esc(project.status || 'unknown')}"></span>
         <span class="badge ${esc(project.status || 'unknown')}">${esc(project.status || 'unknown')}</span>
         ${project.gitUrl ? `<a class="project-git-link" href="${esc(project.gitUrl)}" target="_blank" rel="noopener">↗ ${esc(project.gitUrl.replace('https://github.com/', ''))}</a>` : ''}
+        ${project.nginxPath ? `<a class="project-git-link" href="${window.location.origin}${esc(project.nginxPath)}" target="_blank" rel="noopener">↗ Ouvrir l'app</a>` : ''}
       </div>
       <div class="project-tabs">
         ${['overview','deployments','variables','settings'].map((t) => `
