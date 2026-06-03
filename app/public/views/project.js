@@ -556,7 +556,29 @@ function showEnvStatus(el, msg, type) {
 // SETTINGS TAB
 // ================================================================
 
+function renderExtraRouteRow(route, idx) {
+  return `
+    <div class="extra-route-row form-row" style="align-items:center;gap:6px" data-idx="${idx}">
+      <input class="form-input" data-field="nginxPath" value="${esc(route.nginxPath || '')}" placeholder="/app-api/" style="flex:2" />
+      <input class="form-input" data-field="port" type="number" value="${esc(route.port || '')}" placeholder="4000" style="flex:1" />
+      <label class="form-check" style="white-space:nowrap;margin:0">
+        <input type="checkbox" data-field="stripPrefix" ${route.stripPrefix !== false ? 'checked' : ''} />
+        Strip prefix
+      </label>
+      <button class="btn btn-sm btn-danger btn-remove-route" style="flex-shrink:0">✕</button>
+    </div>
+  `;
+}
+
+function bindRemoveRouteButtons(el) {
+  el.querySelectorAll('.btn-remove-route').forEach((btn) => {
+    btn.onclick = () => btn.closest('.extra-route-row').remove();
+  });
+}
+
 function renderSettings(el, project, navigate) {
+  const extraRoutes = project.extraRoutes || [];
+
   el.innerHTML = `
     <div>
       <div class="section-title">Configuration</div>
@@ -583,7 +605,14 @@ function renderSettings(el, project, navigate) {
           <input type="checkbox" id="s-prefix" ${project.stripPrefix ? 'checked' : ''} />
           Conserver le préfixe (Next.js / basePath)
         </label>
-        <button class="btn btn-primary" id="btn-save-settings" style="align-self:flex-start">Enregistrer</button>
+
+        <div class="section-title" style="margin-top:12px;margin-bottom:6px">Routes supplémentaires</div>
+        <div id="extra-routes-list" style="display:flex;flex-direction:column;gap:6px">
+          ${extraRoutes.map((r, i) => renderExtraRouteRow(r, i)).join('')}
+        </div>
+        <button class="btn btn-sm" id="btn-add-route" style="align-self:flex-start;margin-top:4px">+ Route</button>
+
+        <button class="btn btn-primary" id="btn-save-settings" style="align-self:flex-start;margin-top:8px">Enregistrer</button>
         <div id="settings-status" class="status-msg"></div>
       </div>
     </div>
@@ -594,20 +623,37 @@ function renderSettings(el, project, navigate) {
     </div>
   `;
 
+  el.querySelector('#btn-add-route').addEventListener('click', () => {
+    const list = el.querySelector('#extra-routes-list');
+    const idx = list.children.length;
+    const div = document.createElement('div');
+    div.innerHTML = renderExtraRouteRow({ nginxPath: '', port: '', stripPrefix: true }, idx);
+    list.appendChild(div.firstElementChild);
+    bindRemoveRouteButtons(el);
+  });
+
+  bindRemoveRouteButtons(el);
+
   el.querySelector('#btn-save-settings').addEventListener('click', async () => {
-    const gitUrl     = el.querySelector('#s-git').value.trim();
-    const branch     = el.querySelector('#s-branch').value.trim() || null;
-    const port       = parseInt(el.querySelector('#s-port').value) || null;
-    const nginxPath  = el.querySelector('#s-nginx').value.trim() || null;
+    const gitUrl      = el.querySelector('#s-git').value.trim();
+    const branch      = el.querySelector('#s-branch').value.trim() || null;
+    const port        = parseInt(el.querySelector('#s-port').value) || null;
+    const nginxPath   = el.querySelector('#s-nginx').value.trim() || null;
     const stripPrefix = el.querySelector('#s-prefix').checked;
-    const statusEl   = el.querySelector('#settings-status');
-    const btn        = el.querySelector('#btn-save-settings');
+    const statusEl    = el.querySelector('#settings-status');
+    const btn         = el.querySelector('#btn-save-settings');
+
+    const extraRoutes = [...el.querySelectorAll('.extra-route-row')].map((row) => ({
+      nginxPath:   row.querySelector('[data-field="nginxPath"]').value.trim(),
+      port:        parseInt(row.querySelector('[data-field="port"]').value) || null,
+      stripPrefix: row.querySelector('[data-field="stripPrefix"]').checked,
+    })).filter((r) => r.nginxPath && r.port);
 
     btn.disabled = true;
     try {
-      await updateProject(project.id, { gitUrl, branch, port, nginxPath, stripPrefix });
+      await updateProject(project.id, { gitUrl, branch, port, nginxPath, stripPrefix, extraRoutes });
       await loadProjects();
-      statusEl.textContent = 'Enregistré.';
+      statusEl.textContent = 'Enregistré. Redéploie pour appliquer les changements nginx.';
       statusEl.className = 'status-msg ok';
     } catch (err) {
       statusEl.textContent = err.message;

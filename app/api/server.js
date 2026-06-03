@@ -113,12 +113,12 @@ app.get('/api/projects', requireAuth, async (_req, res) => {
 });
 
 app.post('/api/projects', requireAuth, async (req, res) => {
-  const { id, name, gitUrl, branch, nginxPath, port, stripPrefix = true } = req.body;
+  const { id, name, gitUrl, branch, nginxPath, port, stripPrefix = true, extraRoutes = [] } = req.body;
   if (!id || !name || !gitUrl) return res.status(400).json({ error: 'id, name et gitUrl requis' });
   if (!/^[a-zA-Z0-9_-]+$/.test(id)) return res.status(400).json({ error: 'id invalide (alphanumérique, _ -)' });
   if (!/^https?:\/\//.test(gitUrl)) return res.status(400).json({ error: 'gitUrl invalide' });
   try {
-    const project = await addProject({ id, name, gitUrl, branch: branch || null, nginxPath: nginxPath || null, port: port ? parseInt(port, 10) : null, stripPrefix });
+    const project = await addProject({ id, name, gitUrl, branch: branch || null, nginxPath: nginxPath || null, port: port ? parseInt(port, 10) : null, stripPrefix, extraRoutes });
     res.status(201).json(project);
   } catch (err) {
     res.status(err.message.includes('existe déjà') ? 409 : 500).json({ error: err.message });
@@ -147,8 +147,12 @@ app.delete('/api/projects/:id', requireAuth, async (req, res) => {
   try {
     const project = await getProject(req.params.id);
     await deleteProjectFiles(req.params.id);
-    if (project.nginxPath) {
-      await removeApp(project.nginxPath).catch(() => {});
+    const allPaths = [
+      project.nginxPath,
+      ...((project.extraRoutes || []).map((r) => r.nginxPath)),
+    ].filter(Boolean);
+    if (allPaths.length) {
+      await Promise.all(allPaths.map((p) => removeApp(p).catch(() => {})));
       await reloadNginx().catch(() => {});
     }
     await deleteProject(req.params.id);
@@ -247,12 +251,20 @@ app.post('/api/projects/:id/deployments', requireAuth, async (req, res) => {
   try {
     const project = await getProject(req.params.id);
 
-    if (project.nginxPath && project.port) {
+    const allRoutes = [
+      project.nginxPath && project.port ? { nginxPath: project.nginxPath, port: project.port, stripPrefix: project.stripPrefix } : null,
+      ...(project.extraRoutes || []),
+    ].filter(Boolean);
+    if (allRoutes.length) {
       const config = await readConfig().catch(() => '');
-      if (!config.includes(project.nginxPath)) {
-        await addApp(project.nginxPath, project.port, project.stripPrefix).catch(() => {});
-        await reloadNginx().catch(() => {});
+      let changed = false;
+      for (const route of allRoutes) {
+        if (!config.includes(route.nginxPath)) {
+          await addApp(route.nginxPath, route.port, route.stripPrefix ?? true).catch(() => {});
+          changed = true;
+        }
       }
+      if (changed) await reloadNginx().catch(() => {});
     }
 
     const opts = { env, branch, triggeredBy: 'manual' };

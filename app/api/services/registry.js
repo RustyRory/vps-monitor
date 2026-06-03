@@ -27,7 +27,7 @@ export async function getProject(id) {
 }
 
 export async function addProject(config) {
-  const { id, name, gitUrl, branch = null, nginxPath = null, port = null, stripPrefix = true } = config;
+  const { id, name, gitUrl, branch = null, nginxPath = null, port = null, stripPrefix = true, extraRoutes = [] } = config;
   if (!id || !name || !gitUrl) throw new Error('id, name et gitUrl requis');
 
   const projects = await read();
@@ -41,6 +41,7 @@ export async function addProject(config) {
     nginxPath,
     port,
     stripPrefix,
+    extraRoutes,
     status: 'unknown',
     lastDeployAt: null,
     deployments: [],
@@ -56,7 +57,7 @@ export async function updateProject(id, updates) {
   const idx = projects.findIndex((p) => p.id === id);
   if (idx === -1) throw new Error(`Projet "${id}" introuvable`);
 
-  const allowed = ['name', 'gitUrl', 'branch', 'nginxPath', 'port', 'stripPrefix'];
+  const allowed = ['name', 'gitUrl', 'branch', 'nginxPath', 'port', 'stripPrefix', 'extraRoutes'];
   for (const key of allowed) {
     if (updates[key] !== undefined) projects[idx][key] = updates[key];
   }
