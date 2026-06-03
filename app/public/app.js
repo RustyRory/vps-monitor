@@ -25,6 +25,16 @@ export function navigate(projectId, tab = 'overview') {
 
 // ---- Render ----
 
+let _lastRoute = { projectId: null, tab: null };
+
+function updateStatusBadge(main, project) {
+  const status = project.status || 'unknown';
+  const dot = main.querySelector('.project-title-row .dot');
+  const badge = main.querySelector('.project-title-row .badge');
+  if (dot) dot.className = `dot ${status}`;
+  if (badge) { badge.className = `badge ${status}`; badge.textContent = status; }
+}
+
 function render() {
   const { projects, loading, error } = getState();
   const { projectId, tab } = getRoute();
@@ -35,11 +45,13 @@ function render() {
 
   if (loading) {
     main.innerHTML = '<div class="loading-state">Chargement…</div>';
+    _lastRoute = { projectId: null, tab: null };
     return;
   }
 
   if (error) {
     main.innerHTML = `<div class="error-state">Erreur : ${error}</div>`;
+    _lastRoute = { projectId: null, tab: null };
     return;
   }
 
@@ -49,15 +61,25 @@ function render() {
       return;
     }
     main.innerHTML = '<div class="empty-state">Aucun projet — crée le premier depuis la barre latérale.</div>';
+    _lastRoute = { projectId: null, tab: null };
     return;
   }
 
   const project = projects.find((p) => p.id === projectId);
   if (!project) {
     main.innerHTML = '<div class="error-state">Projet introuvable</div>';
+    _lastRoute = { projectId: null, tab: null };
     return;
   }
 
+  // On polling refreshes, skip re-rendering if already on the same project+tab
+  // to avoid wiping open log panels
+  if (_lastRoute.projectId === projectId && _lastRoute.tab === tab) {
+    updateStatusBadge(main, project);
+    return;
+  }
+
+  _lastRoute = { projectId, tab };
   renderProject(main, project, tab, navigate);
 }
 
