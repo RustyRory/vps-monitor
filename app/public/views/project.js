@@ -12,6 +12,24 @@ function esc(s) {
   return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+function copyText(text) {
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).catch(() => fallbackCopy(text));
+  } else {
+    fallbackCopy(text);
+  }
+}
+
+function fallbackCopy(text) {
+  const el = document.createElement('textarea');
+  el.value = text;
+  el.style.cssText = 'position:fixed;opacity:0';
+  document.body.appendChild(el);
+  el.select();
+  document.execCommand('copy');
+  document.body.removeChild(el);
+}
+
 function relTime(iso) {
   if (!iso) return '—';
   const delta = Date.now() - new Date(iso).getTime();
@@ -435,7 +453,7 @@ async function showBuildLog(el, projectId, deployId, live = false) {
   const indicator = logSection.querySelector('#log-status-indicator');
 
   logSection.querySelector('#log-copy-btn').addEventListener('click', () => {
-    navigator.clipboard.writeText(logEl.textContent).catch(() => {});
+    copyText(logEl.textContent);
   });
 
   logEl.scrollTop = logEl.scrollHeight;
@@ -718,7 +736,7 @@ async function openLogsModal(containerName, tail = 200) {
   overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); }, { once: true });
 
   box.querySelector('#log-modal-copy').addEventListener('click', () => {
-    navigator.clipboard.writeText(logEl.textContent).catch(() => {});
+    copyText(logEl.textContent);
   });
 
   try {
@@ -811,7 +829,7 @@ async function openLogModal(projectId, deployId) {
   box.querySelector('#bm-close').addEventListener('click', close);
   overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); }, { once: true });
   box.querySelector('#bm-copy').addEventListener('click', () => {
-    navigator.clipboard.writeText(logEl.textContent).catch(() => {});
+    copyText(logEl.textContent);
   });
 
   try {
