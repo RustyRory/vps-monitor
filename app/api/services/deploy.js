@@ -164,7 +164,7 @@ export async function runDeployment(projectId, deployId, options = {}) {
     log(`[vps] Démarrage du build...\n`);
     const services = await getAllServiceNames(projectId).catch(() => [projectId]);
 
-    await composeRebuildStreaming(services, isNewClone, log);
+    await composeRebuildStreaming(services, true, log);
 
     // --- Healthcheck ---
     log(`[vps] Healthcheck...\n`);
