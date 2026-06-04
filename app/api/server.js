@@ -396,6 +396,25 @@ app.post('/api/container/start', requireAuth, async (req, res) => {
   catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+app.post('/api/webhook/deploy', async (req, res) => {
+  const secret = process.env.WEBHOOK_SECRET;
+  const auth = req.headers['authorization'];
+  if (!secret || auth !== `Bearer ${secret}`) {
+    return res.status(401).json({ error: 'Non autorisé' });
+  }
+  const { name } = req.body;
+  if (!name) return res.status(400).json({ error: 'name requis' });
+  try {
+    await getProject(name);
+    const deployId = await createDeploymentRecord(name, { triggeredBy: 'webhook' });
+    res.json({ ok: true, deployId });
+    runDeployment(name, deployId, { triggeredBy: 'webhook' })
+      .catch((err) => console.error(`[webhook] ${name}:`, err.message));
+  } catch (err) {
+    res.status(err.message.includes('introuvable') ? 404 : 500).json({ error: err.message });
+  }
+});
+
 app.post('/api/container/remove', requireAuth, async (req, res) => {
   if (!req.body.name) return res.status(400).json({ error: 'name requis' });
   try { await removeContainer(req.body.name); res.json({ ok: true }); }
