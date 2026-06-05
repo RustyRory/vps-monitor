@@ -73,7 +73,7 @@ export async function getAllServiceNames(name) {
   const relPath = await findComposePath(name);
   try {
     const content = await readFile(join(APPS_ROOT, relPath), 'utf8');
-    const servicesBlock = content.match(/^services:\s*\n([\s\S]*?)(?=^\S)/m)?.[1] ?? '';
+    const servicesBlock = content.match(/^services:\s*\n([\s\S]*?)(?=^\S|(?![\s\S]))/m)?.[1] ?? '';
     const matches = [...servicesBlock.matchAll(/^ {2}([a-zA-Z0-9_-]+):/gm)];
     return matches.map((m) => m[1]);
   } catch {
