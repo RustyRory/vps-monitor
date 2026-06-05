@@ -246,27 +246,28 @@ app.get('/api/projects/:id/deployments', requireAuth, async (req, res) => {
   }
 });
 
+async function ensureNginxRoutes(project) {
+  const allRoutes = [
+    project.nginxPath && project.port ? { nginxPath: project.nginxPath, port: project.port, stripPrefix: project.stripPrefix } : null,
+    ...(project.extraRoutes || []),
+  ].filter(Boolean);
+  if (!allRoutes.length) return;
+  const config = await readConfig().catch(() => '');
+  let changed = false;
+  for (const route of allRoutes) {
+    if (!config.includes(route.nginxPath)) {
+      await addApp(route.nginxPath, route.port, route.stripPrefix ?? true).catch(() => {});
+      changed = true;
+    }
+  }
+  if (changed) await reloadNginx().catch(() => {});
+}
+
 app.post('/api/projects/:id/deployments', requireAuth, async (req, res) => {
   const { env, branch } = req.body;
   try {
     const project = await getProject(req.params.id);
-
-    const allRoutes = [
-      project.nginxPath && project.port ? { nginxPath: project.nginxPath, port: project.port, stripPrefix: project.stripPrefix } : null,
-      ...(project.extraRoutes || []),
-    ].filter(Boolean);
-    if (allRoutes.length) {
-      const config = await readConfig().catch(() => '');
-      let changed = false;
-      for (const route of allRoutes) {
-        if (!config.includes(route.nginxPath)) {
-          await addApp(route.nginxPath, route.port, route.stripPrefix ?? true).catch(() => {});
-          changed = true;
-        }
-      }
-      if (changed) await reloadNginx().catch(() => {});
-    }
-
+    await ensureNginxRoutes(project);
     const opts = { env, branch, triggeredBy: 'manual' };
     const deployId = await createDeploymentRecord(req.params.id, opts);
     res.json({ ok: true, deployId, building: true });
@@ -405,7 +406,8 @@ app.post('/api/webhook/deploy', async (req, res) => {
   const { name } = req.body;
   if (!name) return res.status(400).json({ error: 'name requis' });
   try {
-    await getProject(name);
+    const project = await getProject(name);
+    await ensureNginxRoutes(project).catch(() => {});
     const deployId = await createDeploymentRecord(name, { triggeredBy: 'webhook' });
     res.json({ ok: true, deployId });
     runDeployment(name, deployId, { triggeredBy: 'webhook' })
