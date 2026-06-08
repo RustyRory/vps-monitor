@@ -37,6 +37,18 @@
         "port": 5000,
         "stripPrefix": true,
         "proxyTarget": "http://127.0.0.1:5000/api/"
+      },
+      {
+        "nginxPath": "/images/",
+        "port": 3007,
+        "stripPrefix": true,
+        "proxyTarget": "http://127.0.0.1:3007/collegelaboussole/images/"
+      },
+      {
+        "nginxPath": "/assets/",
+        "port": 3007,
+        "stripPrefix": true,
+        "proxyTarget": "http://127.0.0.1:3007/collegelaboussole/assets/"
       }
     ],
     "status": "unknown",
