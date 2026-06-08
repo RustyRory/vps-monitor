@@ -30,7 +30,7 @@
     "branch": "staging",
     "nginxPath": "/collegelaboussole/",
     "port": 3007,
-    "stripPrefix": true,
+    "stripPrefix": false,
     "status": "unknown",
     "lastDeployAt": null,
     "deployments": []
