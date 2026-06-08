@@ -27,7 +27,7 @@
     "id": "CollegeLaBoussole",
     "name": "CollegeLaBoussole",
     "gitUrl": "https://github.com/RustyRory/CollegeLaBoussole.git",
-    "branch": null,
+    "branch": "staging",
     "nginxPath": "/collegelaboussole/",
     "port": 3007,
     "stripPrefix": true,
