@@ -6,7 +6,7 @@
     "branch": null,
     "nginxPath": "/saintbarthvolley/",
     "port": 3001,
-    "stripPrefix": true,
+    "stripPrefix": false,
     "status": "unknown",
     "lastDeployAt": null,
     "deployments": []
