@@ -20,5 +20,5 @@ services:
     environment:
       PORT: "3000"
       BASE_URL: "http://78.138.58.95"
-      NGINX_CONFIG: /etc/nginx/sites-available/vps
+      NGINX_CONFIG: /etc/nginx/sites-enabled/vps
       VPSCONFIG_PATH: /var/www/vps-monitor
