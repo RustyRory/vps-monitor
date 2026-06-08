@@ -256,7 +256,7 @@ async function ensureNginxRoutes(project) {
   let changed = false;
   for (const route of allRoutes) {
     if (!config.includes(route.nginxPath)) {
-      await addApp(route.nginxPath, route.port, route.stripPrefix ?? true).catch(() => {});
+      await addApp(route.nginxPath, route.port, route.stripPrefix ?? true, route.proxyTarget ?? null).catch(() => {});
       changed = true;
     }
   }

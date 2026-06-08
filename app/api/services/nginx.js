@@ -59,11 +59,13 @@ export function parseConfigMeta(content) {
   return { serverName, rootPort };
 }
 
-export async function addApp(path, port, stripPrefix = true) {
+export async function addApp(path, port, stripPrefix = true, proxyTarget = null) {
   const content = await readConfig();
-  const proxyTarget = stripPrefix
-    ? `http://127.0.0.1:${port}/`
-    : `http://127.0.0.1:${port}`;
+  if (!proxyTarget) {
+    proxyTarget = stripPrefix
+      ? `http://127.0.0.1:${port}/`
+      : `http://127.0.0.1:${port}`;
+  }
   const block = `
     location ${path} {
         proxy_pass ${proxyTarget};
